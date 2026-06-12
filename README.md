@@ -72,10 +72,7 @@ Credentials are saved automatically — next launch skips login.
 sudo dkp-pacman -S 3ds-dev 3ds-curl 3ds-mbedtls 3ds-zlib \
     3ds-libmpg123 3ds-libopus 3ds-opusfile 3ds-libvorbisidec 3ds-libogg
 
-# Build FFmpeg (first time only)
-./lib/ffmpeg/build-ffmpeg.sh docker
-
-# Build the app
+# Build the app (first run cross-compiles FFmpeg, ~15 min; subsequent runs are fast)
 ./build.sh
 
 # Deploy via FTP (3DS must be running ftpd)
