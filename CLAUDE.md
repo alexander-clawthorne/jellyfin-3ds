@@ -2,6 +2,9 @@
 
 Native Jellyfin media client for Nintendo 3DS homebrew.
 
+Repo lives at github.com/bogocat/jellyfin-3ds (the old serrattleballs
+pseudonym is retired). CI builds every PR via GitHub Actions.
+
 ## Build
 
 Requires [devkitPro](https://devkitpro.org/wiki/Getting_Started) with 3DS toolchain:
