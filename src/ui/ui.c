@@ -414,11 +414,12 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 } else if (is_container) {
                     ui_navigate_into(state, session, item);
                 } else if (item->type == JFIN_ITEM_BOOK) {
-                    state->now_playing = *item;
-                    state->reader_page = 0;
-                    state->reader_loading = true;
-                    state->previous_view = state->current_view;
-                    state->current_view = VIEW_READER;
+                    state->now_playing    = *item;
+                    state->reader_page    = 0;
+                    state->reader_load_page = false; /* will set true once READY */
+                    state->previous_view  = state->current_view;
+                    state->current_view   = VIEW_READER;
+                    reader_open_book(session, item->id);
                 }
                 /* JFIN_ITEM_UNKNOWN: do nothing */
             }
@@ -762,32 +763,40 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
         break;
 
     case VIEW_READER: {
-        /* Load a pending page (set when opening a book or on key press).
-         * reader_load_page is synchronous; the frame blocks for the download. */
-        if (state->reader_loading) {
-            reader_load_page(session, state->now_playing.id, state->reader_page);
-            state->reader_loading = false;
+        reader_state_t rs = reader_get_state();
+
+        /* Once the CBZ is ready, load the pending page */
+        if (rs == READER_READY && state->reader_load_page) {
+            reader_load_page(state->reader_page);
+            state->reader_load_page = false;
         }
-        int total = state->now_playing.page_count;
-        /* Next page */
-        if (kdown & (KEY_R | KEY_DRIGHT)) {
-            if (total <= 0 || state->reader_page < total - 1) {
-                state->reader_page++;
-                state->reader_loading = true;
+
+        /* Auto-trigger first page load when download just finished */
+        if (rs == READER_READY && !reader_page_ready() && !state->reader_load_page)
+            state->reader_load_page = true;
+
+        /* Page navigation — only when book is open and a page is showing */
+        if (rs == READER_READY) {
+            int total = reader_page_count();
+            if (kdown & (KEY_R | KEY_DRIGHT)) {
+                if (total <= 0 || state->reader_page < total - 1) {
+                    state->reader_page++;
+                    state->reader_load_page = true;
+                }
+            }
+            if (kdown & (KEY_L | KEY_DLEFT)) {
+                if (state->reader_page > 0) {
+                    state->reader_page--;
+                    state->reader_load_page = true;
+                }
             }
         }
-        /* Previous page */
-        if (kdown & (KEY_L | KEY_DLEFT)) {
-            if (state->reader_page > 0) {
-                state->reader_page--;
-                state->reader_loading = true;
-            }
-        }
-        /* A: retry a failed page load */
-        if ((kdown & KEY_A) && !reader_is_ready() && !state->reader_loading)
-            state->reader_loading = true;
-        if (kdown & KEY_B)
+
+        /* B: back (cancel download if in progress) */
+        if (kdown & KEY_B) {
+            reader_cancel();
             state->current_view = state->previous_view;
+        }
         break;
     }
 
@@ -1305,39 +1314,68 @@ void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
 
 void ui_render_reader(const ui_state_t *state)
 {
-    /* Top screen: black background + page image */
+    reader_state_t rs = reader_get_state();
+
+    /* Top screen: page image or status overlay */
     C2D_TargetClear(s_top, C2D_Color32(0, 0, 0, 255));
     C2D_SceneBegin(s_top);
-    if (reader_is_ready()) {
+
+    if (reader_page_ready()) {
         reader_draw(0, 0, TOP_SCREEN_WIDTH, TOP_SCREEN_HEIGHT);
-    } else if (state->reader_loading) {
-        draw_text(140, 105, 0.55f, rgba(COLOR_TEXT_SECONDARY), "Loading page...");
+    } else if (rs == READER_DOWNLOADING) {
+        size_t total = reader_dl_total();
+        size_t bytes = reader_dl_bytes();
+        draw_text(115, 75, 0.52f, rgba(COLOR_TEXT_SECONDARY),
+                  "Downloading book...");
+        char dl_str[48];
+        if (total > 0)
+            snprintf(dl_str, sizeof(dl_str), "%.1f / %.1f MB",
+                     bytes / (1024.0f * 1024.0f),
+                     total / (1024.0f * 1024.0f));
+        else
+            snprintf(dl_str, sizeof(dl_str), "%.1f MB downloaded",
+                     bytes / (1024.0f * 1024.0f));
+        draw_text(110, 105, 0.58f, rgba(COLOR_PRIMARY), dl_str);
+
+        /* Progress bar (shown when Content-Length is known) */
+        if (total > 0) {
+            float pct = (float)bytes / (float)total;
+            if (pct > 1.0f) pct = 1.0f;
+            int bx = 60, by = 140, bw = 280, bh = 10;
+            C2D_DrawRectSolid(bx, by, 0.5f, bw, bh, rgba(COLOR_BG_CARD));
+            C2D_DrawRectSolid(bx, by, 0.5f, (int)(bw * pct), bh, rgba(COLOR_PRIMARY));
+        }
+        draw_text(140, 170, 0.42f, rgba(COLOR_TEXT_SECONDARY), "B: Cancel");
+    } else if (rs == READER_ERROR) {
+        draw_text(100, 80,  0.55f, rgba(0xFF5555FF), "Failed to open book");
+        draw_text(55,  110, 0.42f, rgba(COLOR_TEXT_SECONDARY),
+                  "Could not download from Jellyfin.");
+        draw_text(55,  130, 0.42f, rgba(COLOR_TEXT_SECONDARY),
+                  "Check server URL, auth, and debug.log");
+        draw_text(125, 170, 0.48f, rgba(COLOR_TEXT_PRIMARY), "B: Back");
     } else {
-        /* Load attempt finished but nothing usable — surface the problem */
-        draw_text(110, 85,  0.55f, rgba(0xFF5555FF), "Page failed to load");
-        draw_text(60,  115, 0.42f, rgba(COLOR_TEXT_SECONDARY),
-                  "Server returned an error — see debug.log");
-        draw_text(60,  140, 0.42f, rgba(COLOR_TEXT_SECONDARY),
-                  "Ensure Jellyfin has scanned the library");
-        draw_text(120, 170, 0.48f, rgba(COLOR_TEXT_PRIMARY), "A: Retry   B: Back");
+        /* READER_READY but page not yet extracted */
+        draw_text(135, 105, 0.55f, rgba(COLOR_TEXT_SECONDARY), "Loading page...");
     }
 
-    /* Bottom screen: page counter + controls */
+    /* Bottom screen: title + page counter + controls */
     C2D_TargetClear(s_bottom, rgba(COLOR_BG_DARK));
     C2D_SceneBegin(s_bottom);
 
     draw_text(10, 5, 0.45f, rgba(COLOR_TEXT_SECONDARY), state->now_playing.name);
 
-    char pg_str[32];
-    if (state->now_playing.page_count > 0)
-        snprintf(pg_str, sizeof(pg_str), "Page %d / %d",
-                 state->reader_page + 1, state->now_playing.page_count);
-    else
-        snprintf(pg_str, sizeof(pg_str), "Page %d", state->reader_page + 1);
-    draw_text(90, 110, 0.6f, rgba(COLOR_PRIMARY), pg_str);
-
-    draw_text(35, 200, 0.45f, rgba(COLOR_TEXT_PRIMARY),
-              "L/R or D-pad: Turn page  B: Back");
+    if (reader_page_ready()) {
+        char pg_str[32];
+        int total = reader_page_count();
+        if (total > 0)
+            snprintf(pg_str, sizeof(pg_str), "Page %d / %d",
+                     state->reader_page + 1, total);
+        else
+            snprintf(pg_str, sizeof(pg_str), "Page %d", state->reader_page + 1);
+        draw_text(90, 110, 0.6f, rgba(COLOR_PRIMARY), pg_str);
+        draw_text(35, 200, 0.45f, rgba(COLOR_TEXT_PRIMARY),
+                  "L/R or D-pad: Turn page  B: Back");
+    }
 }
 
 /* ── Main render dispatch ──────────────────────────────────────────── */
