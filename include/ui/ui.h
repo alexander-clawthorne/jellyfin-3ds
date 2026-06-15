@@ -111,6 +111,10 @@ typedef struct {
     int                  reader_page;        /* current page index (0-based) */
     bool                 reader_load_page;   /* page extraction pending (CBZ already open) */
     bool                 reader_rotated;     /* SELECT: 90° CCW for landscape reading */
+    bool                 reader_split;       /* START: dual-screen page mode */
+    float                reader_zoom;        /* 1.0 = fit, > 1.0 = zoomed in */
+    float                reader_pan_x;       /* horizontal offset in pixels */
+    float                reader_pan_y;       /* vertical offset (split mode: scroll) */
 
     /* Downloads manager */
     int                  downloads_scroll;

@@ -332,6 +332,32 @@ void reader_open_book(const jfin_session_t *session, const char *item_id)
     }
 }
 
+void reader_open_local(const char *path)
+{
+    if (s_rdr.state == READER_DOWNLOADING) {
+        s_rdr.cancel = true;
+        join_dl_thread();
+        s_rdr.cancel = false;
+    } else {
+        join_dl_thread();
+    }
+
+    s_rdr.dl_bytes   = 0;
+    s_rdr.dl_total   = 0;
+    s_rdr.page_ready = false;
+
+    if (s_rdr.cbz_open_flag) { cbz_close(&s_rdr.cbz); s_rdr.cbz_open_flag = false; }
+
+    if (cbz_open(&s_rdr.cbz, path)) {
+        s_rdr.cbz_open_flag = true;
+        s_rdr.state         = READER_READY;
+        log_write("CBZ: opened local %s — %d pages", path, s_rdr.cbz.count);
+    } else {
+        log_write("CBZ: failed to open local %s", path);
+        s_rdr.state = READER_ERROR;
+    }
+}
+
 void reader_cancel(void)
 {
     if (s_rdr.state == READER_DOWNLOADING)
@@ -435,17 +461,41 @@ size_t         reader_dl_bytes(void)   { return s_rdr.dl_bytes; }
 size_t         reader_dl_total(void)   { return s_rdr.dl_total; }
 int            reader_page_count(void) { return s_rdr.cbz_open_flag ? s_rdr.cbz.count : 0; }
 bool           reader_page_ready(void) { return s_rdr.page_ready; }
+int            reader_page_width(void) { return s_rdr.pw; }
+int            reader_page_height(void){ return s_rdr.ph; }
 
-void reader_draw(float x, float y, float w, float h)
+void reader_draw(float x, float y, float w, float h,
+                 float zoom, float pan_x, float pan_y)
 {
     if (!s_rdr.page_ready) return;
     float sx = w / (float)s_rdr.pw;
     float sy = h / (float)s_rdr.ph;
-    float sc = sx < sy ? sx : sy;
+    float sc = (sx < sy ? sx : sy) * zoom;
     float dw = s_rdr.pw * sc;
     float dh = s_rdr.ph * sc;
     C2D_DrawImageAt(s_rdr.img,
-                    x + (w - dw) * 0.5f,
-                    y + (h - dh) * 0.5f,
+                    x + (w - dw) * 0.5f + pan_x,
+                    y + (h - dh) * 0.5f + pan_y,
                     0.5f, NULL, sc, sc);
+}
+
+void reader_draw_split_top(float zoom, float pan_x, float pan_y)
+{
+    if (!s_rdr.page_ready) return;
+    float sc = (400.0f / (float)s_rdr.pw) * zoom;
+    float dw = s_rdr.pw * sc;
+    float ix  = (400.0f - dw) * 0.5f + pan_x;
+    C2D_DrawImageAt(s_rdr.img, ix, pan_y, 0.5f, NULL, sc, sc);
+}
+
+void reader_draw_split_bottom(float zoom, float pan_x, float pan_y)
+{
+    if (!s_rdr.page_ready) return;
+    float sc  = (400.0f / (float)s_rdr.pw) * zoom;
+    float dw  = s_rdr.pw * sc;
+    /* Horizontal: same basis as top (400px wide) mapped into 320px screen */
+    float ix  = (400.0f - dw) * 0.5f + pan_x;
+    /* Vertical: continue 240px below where the top screen started */
+    float iy  = pan_y - 240.0f;
+    C2D_DrawImageAt(s_rdr.img, ix, iy, 0.5f, NULL, sc, sc);
 }
