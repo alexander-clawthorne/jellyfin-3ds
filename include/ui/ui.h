@@ -128,6 +128,9 @@ typedef struct {
     int                  downloads_scroll;
     int                  downloads_index;
     bool                 downloads_loaded;   /* true after directory has been scanned */
+    bool                 downloads_queue_focus;  /* true = navigating queue on top screen */
+    int                  downloads_queue_index;  /* selected queue item */
+    int                  downloads_name_offset;  /* char offset for scrolling long names */
 } ui_state_t;
 
 /* ── Lifecycle ───────────────────────────────────────────────────── */
