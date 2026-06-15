@@ -43,6 +43,7 @@ typedef enum {
     JFIN_ITEM_SERIES,
     JFIN_ITEM_SEASON,
     JFIN_ITEM_EPISODE,
+    JFIN_ITEM_BOOK,    /* CBZ / comic / manga */
     JFIN_ITEM_UNKNOWN
 } jfin_item_type_t;
 
@@ -60,6 +61,7 @@ typedef struct {
     bool has_primary_image;
     bool has_album_image;            /* album has art (for audio track fallback) */
     jfin_3d_format_t video_3d_format; /* stereoscopic 3D format (SBS/TAB) */
+    int  page_count;                 /* JFIN_ITEM_BOOK: total pages from ChildCount */
 } jfin_item_t;
 
 typedef struct {

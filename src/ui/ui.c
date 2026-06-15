@@ -18,6 +18,7 @@
 #include "audio/player.h"
 #include "video/video_player.h"
 #include "ui/album_art.h"
+#include "ui/reader.h"
 #include "util/config.h"
 #include "util/log.h"
 
@@ -412,6 +413,12 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     }
                 } else if (is_container) {
                     ui_navigate_into(state, session, item);
+                } else if (item->type == JFIN_ITEM_BOOK) {
+                    state->now_playing = *item;
+                    state->reader_page = 0;
+                    state->reader_loading = true;
+                    state->previous_view = state->current_view;
+                    state->current_view = VIEW_READER;
                 }
                 /* JFIN_ITEM_UNKNOWN: do nothing */
             }
@@ -753,6 +760,33 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             }
         }
         break;
+
+    case VIEW_READER: {
+        /* Load a pending page (set when opening a book or on key press).
+         * reader_load_page is synchronous; the frame blocks for the download. */
+        if (state->reader_loading) {
+            reader_load_page(session, state->now_playing.id, state->reader_page);
+            state->reader_loading = false;
+        }
+        int total = state->now_playing.page_count;
+        /* Next page */
+        if (kdown & (KEY_R | KEY_DRIGHT)) {
+            if (total <= 0 || state->reader_page < total - 1) {
+                state->reader_page++;
+                state->reader_loading = true;
+            }
+        }
+        /* Previous page */
+        if (kdown & (KEY_L | KEY_DLEFT)) {
+            if (state->reader_page > 0) {
+                state->reader_page--;
+                state->reader_loading = true;
+            }
+        }
+        if (kdown & KEY_B)
+            state->current_view = state->previous_view;
+        break;
+    }
 
     case VIEW_SETTINGS:
         /* D-pad up/down: move cursor, skip separators */
@@ -1264,6 +1298,37 @@ void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
               "A:Toggle L/R:Change B:Back");
 }
 
+/* ── Manga reader render ───────────────────────────────────────────── */
+
+void ui_render_reader(const ui_state_t *state)
+{
+    /* Top screen: black background + page image (or "Loading..." placeholder) */
+    C2D_TargetClear(s_top, C2D_Color32(0, 0, 0, 255));
+    C2D_SceneBegin(s_top);
+    if (reader_is_ready()) {
+        reader_draw(0, 0, TOP_SCREEN_WIDTH, TOP_SCREEN_HEIGHT);
+    } else {
+        draw_text(155, 110, 0.6f, rgba(COLOR_TEXT_SECONDARY), "Loading...");
+    }
+
+    /* Bottom screen: page counter + controls */
+    C2D_TargetClear(s_bottom, rgba(COLOR_BG_DARK));
+    C2D_SceneBegin(s_bottom);
+
+    draw_text(10, 5, 0.45f, rgba(COLOR_TEXT_SECONDARY), state->now_playing.name);
+
+    char pg_str[32];
+    if (state->now_playing.page_count > 0)
+        snprintf(pg_str, sizeof(pg_str), "Page %d / %d",
+                 state->reader_page + 1, state->now_playing.page_count);
+    else
+        snprintf(pg_str, sizeof(pg_str), "Page %d", state->reader_page + 1);
+    draw_text(90, 110, 0.6f, rgba(COLOR_PRIMARY), pg_str);
+
+    draw_text(35, 200, 0.45f, rgba(COLOR_TEXT_PRIMARY),
+              "L/R or D-pad: Turn page  B: Back");
+}
+
 /* ── Main render dispatch ──────────────────────────────────────────── */
 
 void ui_render(const ui_state_t *state, const jfin_session_t *session,
@@ -1282,9 +1347,11 @@ void ui_render(const ui_state_t *state, const jfin_session_t *session,
     C2D_TextBufClear(s_text_buf);
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
-    /* Top screen: branding or now-playing */
+    /* Top screen: branding, now-playing, or reader (both screens) */
     if (state->current_view == VIEW_NOW_PLAYING) {
         ui_render_now_playing(state, player);
+    } else if (state->current_view == VIEW_READER) {
+        ui_render_reader(state);
     } else {
         C2D_TargetClear(s_top, rgba(COLOR_BG_DARK));
         C2D_SceneBegin(s_top);
@@ -1313,6 +1380,9 @@ void ui_render(const ui_state_t *state, const jfin_session_t *session,
         ui_render_browse(state);
         break;
     case VIEW_NOW_PLAYING:
+        /* Already rendered above (both screens) */
+        break;
+    case VIEW_READER:
         /* Already rendered above (both screens) */
         break;
     case VIEW_SETTINGS:

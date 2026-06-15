@@ -19,6 +19,7 @@
 #include "audio/player.h"
 #include "video/video_player.h"
 #include "ui/ui.h"
+#include "ui/reader.h"
 #include "util/config.h"
 #include "util/log.h"
 
@@ -93,6 +94,7 @@ int main(int argc, char *argv[])
         return 1;
     }
     video_player_init(); /* optional — fails gracefully on Old 3DS */
+    reader_init();       /* optional — fails gracefully on OOM */
 
     /* Try restoring previous session */
     memset(&s_session, 0, sizeof(s_session));
@@ -154,6 +156,7 @@ int main(int argc, char *argv[])
 
     video_player_stop();
     video_player_cleanup();
+    reader_cleanup();
     audio_player_stop();
     audio_player_cleanup();
     ui_cleanup();
