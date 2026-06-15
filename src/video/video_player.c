@@ -25,6 +25,9 @@
 #include "video/video_player.h"
 #include "video/ffmpeg_demux.h"
 #include "video/mvd_decode.h"
+#include "util/config.h"
+
+extern jfin_config_t g_config;
 
 /* ── Ring buffer for network data ──────────────────────────────────── */
 
@@ -296,6 +299,40 @@ static void net_thread_func(void *arg)
             __atomic_store_n(&s_vp.demux.ring_finished, true, __ATOMIC_RELEASE);
             return;
         }
+
+        /* Get file size for duration estimate and seeking */
+        fseek(lf, 0, SEEK_END);
+        long file_size = ftell(lf);
+        fseek(lf, 0, SEEK_SET);
+
+        if (file_size > 0) {
+            /* Estimate duration from file size + configured bitrate (video + audio kbps → bps) */
+            if (s_vp.duration_ticks == 0) {
+                long total_bps = (long)(g_config.video_bitrate + g_config.audio_bitrate) * 1000L;
+                if (total_bps > 0) {
+                    double dur_secs = (double)file_size * 8.0 / (double)total_bps;
+                    s_vp.duration_ticks = (int64_t)(dur_secs * 10000000.0);
+                    log_write("NET: estimated duration %.1fs from file_size=%ld bps=%ld",
+                              dur_secs, file_size, total_bps);
+                }
+            }
+
+            /* Approximate byte-level seek for ±30s L/R buttons */
+            int64_t dur = s_vp.duration_ticks;
+            if (s_vp.seek_offset_ticks > 0 && dur > 0) {
+                long seek_bytes = (long)((double)file_size *
+                    (double)s_vp.seek_offset_ticks / (double)dur);
+                seek_bytes = (seek_bytes / 188) * 188;  /* align to TS packet boundary */
+                if (seek_bytes > 0 && seek_bytes < file_size) {
+                    fseek(lf, seek_bytes, SEEK_SET);
+                    log_write("NET: local seek to %ldB (%.1fs of %.1fs)",
+                              seek_bytes,
+                              (double)s_vp.seek_offset_ticks / 10000000.0,
+                              (double)dur / 10000000.0);
+                }
+            }
+        }
+
         static char s_local_buf[65536];
         size_t n;
         while (!s_vp.stop_requested &&
