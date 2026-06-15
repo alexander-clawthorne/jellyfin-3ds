@@ -1316,9 +1316,9 @@ void ui_render_reader(const ui_state_t *state)
         /* Load attempt finished but nothing usable — surface the problem */
         draw_text(110, 85,  0.55f, rgba(0xFF5555FF), "Page failed to load");
         draw_text(60,  115, 0.42f, rgba(COLOR_TEXT_SECONDARY),
-                  "Check jellyfin.log on the SD card");
+                  "Server returned an error — see debug.log");
         draw_text(60,  140, 0.42f, rgba(COLOR_TEXT_SECONDARY),
-                  "Books library may need a rescan");
+                  "Ensure Jellyfin has scanned the library");
         draw_text(120, 170, 0.48f, rgba(COLOR_TEXT_PRIMARY), "A: Retry   B: Back");
     }
 
