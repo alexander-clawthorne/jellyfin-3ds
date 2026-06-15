@@ -108,7 +108,7 @@ typedef struct {
 
     /* Manga / comic reader */
     int                  reader_page;        /* current page index (0-based) */
-    bool                 reader_loading;     /* page load pending on next update */
+    bool                 reader_load_page;   /* page extraction pending (CBZ already open) */
 } ui_state_t;
 
 /* ── Lifecycle ───────────────────────────────────────────────────── */
