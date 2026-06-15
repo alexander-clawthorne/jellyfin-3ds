@@ -33,6 +33,10 @@ typedef enum {
 bool dl_queue_video(const char *item_id, const char *item_name,
                     const char *url, const char *sub_track_name);
 
+/* Queue a book/CBZ download. url must include api_key.
+ * Skips download if the file already exists (reader cache hit). */
+bool dl_queue_book(const char *item_id, const char *display_name, const char *url);
+
 /* Start the next queued item if the downloader is idle. Call from main loop. */
 void dl_process_queue(void);
 

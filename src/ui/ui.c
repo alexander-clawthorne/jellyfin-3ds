@@ -9,6 +9,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <dirent.h>
 #include <sys/stat.h>
@@ -203,6 +204,7 @@ static void draw_list_item_bg(float y, float w, float h, bool selected)
 /* ── Settings items ───────────────────────────────────────────────── */
 
 enum {
+    SET_DOWNLOADS,              /* action: open downloads manager — pinned first */
     SET_AUDIO_BITRATE,
     SET_VIDEO_BITRATE,
     SET_AUTO_ADVANCE,
@@ -211,8 +213,6 @@ enum {
     SET_SERVER,                 /* display-only */
     SET_USERNAME,               /* display-only */
     SET_LOGOUT,                 /* action */
-    SET_SEPARATOR_DOWNLOADS,    /* non-selectable divider */
-    SET_DOWNLOADS,              /* action: open downloads manager */
     SET_SEPARATOR_ABOUT,        /* non-selectable divider */
     SET_VERSION,                /* display-only */
     SET_DEVICE_ID,              /* display-only */
@@ -227,7 +227,6 @@ static const int video_rates[] = {256, 472, 768};
 static bool settings_is_separator(int idx)
 {
     return idx == SET_SEPARATOR_ACCOUNT ||
-           idx == SET_SEPARATOR_DOWNLOADS ||
            idx == SET_SEPARATOR_ABOUT;
 }
 
@@ -604,6 +603,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 jfin_item_t *item = &state->items.items[state->selected_index];
                 bool is_video = (item->type == JFIN_ITEM_MOVIE ||
                                  item->type == JFIN_ITEM_EPISODE);
+                bool is_book  = (item->type == JFIN_ITEM_BOOK);
                 if (is_video) {
                     jfin_stream_t stream;
                     /* Use active subtitle track name if available */
@@ -616,10 +616,48 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                             }
                         }
                     }
+                    /* Build breadcrumb display name: "Series / Season / E## - Title" */
+                    char dl_name[256];
+                    if (item->type == JFIN_ITEM_EPISODE) {
+                        char series_part[80] = "";
+                        if (item->series_name[0])
+                            snprintf(series_part, sizeof(series_part), "%s / ", item->series_name);
+                        else if (state->parent_depth >= 2)
+                            snprintf(series_part, sizeof(series_part), "%s / ",
+                                     state->parent_stack_names[state->parent_depth - 2]);
+                        char season_part[64] = "";
+                        if (state->parent_depth >= 1)
+                            snprintf(season_part, sizeof(season_part), "%s / ",
+                                     state->parent_stack_names[state->parent_depth - 1]);
+                        if (item->index_number > 0)
+                            snprintf(dl_name, sizeof(dl_name), "%s%sE%02d - %s",
+                                     series_part, season_part, item->index_number, item->name);
+                        else
+                            snprintf(dl_name, sizeof(dl_name), "%s%s%s",
+                                     series_part, season_part, item->name);
+                    } else {
+                        snprintf(dl_name, sizeof(dl_name), "%s", item->name);
+                    }
                     if (jfin_get_video_stream(session, item->id, 0, false,
                                              state->subtitle_stream_index, &stream)) {
-                        dl_queue_video(item->id, item->name, stream.url, sub_name);
+                        dl_queue_video(item->id, dl_name, stream.url, sub_name);
                     }
+                } else if (is_book) {
+                    /* Build breadcrumb display name for the book */
+                    char book_name[256];
+                    book_name[0] = '\0';
+                    for (int _d = 1; _d < state->parent_depth; _d++) {
+                        strncat(book_name, state->parent_stack_names[_d],
+                                sizeof(book_name) - strlen(book_name) - 1);
+                        strncat(book_name, " / ",
+                                sizeof(book_name) - strlen(book_name) - 1);
+                    }
+                    strncat(book_name, item->name, sizeof(book_name) - strlen(book_name) - 1);
+                    /* Build download URL with api_key */
+                    char dl_url[JFIN_URL_BUF];
+                    snprintf(dl_url, sizeof(dl_url), "%s/Items/%s/Download?api_key=%s",
+                             session->server_url, item->id, session->access_token);
+                    dl_queue_book(item->id, book_name, dl_url);
                 }
             }
         }
@@ -656,7 +694,21 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             bool video_finished = (vs.state == VIDEO_STOPPED && ps.state == PLAYER_STOPPED);
 
             if (audio_finished || video_finished) {
-                int next = state->playing_index + 1;
+                int next;
+                if (state->repeat_mode == 1) {
+                    /* Repeat-one: replay the same track */
+                    next = state->playing_index;
+                } else if (state->shuffle_mode && state->items.count > 1) {
+                    /* Shuffle: pick a random track that's different from current */
+                    do {
+                        next = rand() % state->items.count;
+                    } while (next == state->playing_index);
+                } else {
+                    next = state->playing_index + 1;
+                    /* Repeat-all: wrap around */
+                    if (state->repeat_mode == 2 && next >= state->items.count)
+                        next = 0;
+                }
                 if (next < state->items.count) {
                     jfin_item_t *next_item = &state->items.items[next];
                     /* Only auto-advance to same playable type */
@@ -804,7 +856,8 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
 
                 int64_t new_pos = cur_pos + offset;
                 if (new_pos < 0) new_pos = 0;
-                if (new_pos >= state->now_playing.runtime_ticks)
+                if (state->now_playing.runtime_ticks > 0 &&
+                    new_pos >= state->now_playing.runtime_ticks)
                     new_pos = state->now_playing.runtime_ticks - 100000000LL; /* 10s before end */
 
                 jfin_stream_t stream;
@@ -882,6 +935,12 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     video_player_play(sub_stream.url, state->now_playing.runtime_ticks,
                                       resume_ticks, sub_mode);
             }
+            /* Y: toggle shuffle (audio only — video uses Y for subtitles) */
+            if ((kdown & KEY_Y) && !vid_active)
+                state->shuffle_mode = !state->shuffle_mode;
+            /* SELECT: cycle repeat mode 0→1→2→0 (audio only) */
+            if ((kdown & KEY_SELECT) && !vid_active)
+                state->repeat_mode = (state->repeat_mode + 1) % 3;
             /* B to go back to browse */
             if (kdown & KEY_B) {
                 state->bottom_hidden = false;
@@ -1134,10 +1193,16 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             if (state->downloads_index >= dl_manager_count())
                 state->downloads_index = 0;
         }
-        if (kdown & KEY_DUP && state->downloads_index > 0)
+        if (kdown & KEY_DUP && state->downloads_index > 0) {
             state->downloads_index--;
-        if (kdown & KEY_DDOWN && state->downloads_index < dl_manager_count() - 1)
+            if (state->downloads_index < state->downloads_scroll)
+                state->downloads_scroll = state->downloads_index;
+        }
+        if (kdown & KEY_DDOWN && state->downloads_index < dl_manager_count() - 1) {
             state->downloads_index++;
+            if (state->downloads_index >= state->downloads_scroll + UI_MAX_VISIBLE_ITEMS)
+                state->downloads_scroll = state->downloads_index - UI_MAX_VISIBLE_ITEMS + 1;
+        }
         /* A: open the selected file */
         if (kdown & KEY_A && state->downloads_index < dl_manager_count()) {
             const dl_entry_t *e = dl_manager_get(state->downloads_index);
@@ -1569,15 +1634,27 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
             sub_str);
     }
 
+    /* Shuffle/repeat status (audio only) */
+    if (!is_video) {
+        const char *rep_str = (state->repeat_mode == 1) ? "Rep:1  " :
+                              (state->repeat_mode == 2) ? "Rep:All" : "Rep:Off";
+        const char *shuf_str = state->shuffle_mode ? "Shuf:ON " : "Shuf:OFF";
+        char mode_str[32];
+        snprintf(mode_str, sizeof(mode_str), "%s  %s", shuf_str, rep_str);
+        draw_text(60, 125, 0.42f,
+                  rgba(state->shuffle_mode || state->repeat_mode ? COLOR_ACCENT : COLOR_TEXT_SECONDARY),
+                  mode_str);
+    }
+
     /* Controls hint */
     const char *ctl_hint;
     if (!is_video)
-        ctl_hint = "A:Pause X:Stop B:Back L/R:Seek";
+        ctl_hint = "A:Pause X:Stop B:Back  Y:Shuffle  SEL:Repeat";
     else if (state->now_playing_offline)
         ctl_hint = "A:Pause X:Stop B:Back L/R:Restart";
     else
         ctl_hint = "A:Pause X:Stop B:Back L/R:Seek Y:Subs";
-    draw_text(20, 180, 0.45f, rgba(COLOR_TEXT_PRIMARY), ctl_hint);
+    draw_text(10, 180, 0.4f, rgba(COLOR_TEXT_PRIMARY), ctl_hint);
 }
 
 void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
@@ -1595,9 +1672,7 @@ void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
             /* Separator: thin line + label */
             float line_y = y + UI_LIST_ITEM_HEIGHT / 2;
             draw_rect(10, line_y, 300, 1, rgba(COLOR_SEPARATOR));
-            const char *sep_label = (idx == SET_SEPARATOR_ACCOUNT)   ? "Account"
-                                 : (idx == SET_SEPARATOR_DOWNLOADS) ? "Downloads"
-                                                                     : "About";
+            const char *sep_label = (idx == SET_SEPARATOR_ACCOUNT) ? "Account" : "About";
             draw_text(15, line_y + 4, 0.4f, rgba(COLOR_TEXT_SECONDARY), sep_label);
             continue;
         }
@@ -1852,12 +1927,24 @@ void ui_render_downloads(const ui_state_t *state)
         return;
     }
 
+    /* Scrollbar */
+    if (cnt > UI_MAX_VISIBLE_ITEMS) {
+        int bar_h = 190;
+        int bar_y = 30;
+        int thumb_h = bar_h * UI_MAX_VISIBLE_ITEMS / cnt;
+        if (thumb_h < 8) thumb_h = 8;
+        int thumb_y = bar_y + (bar_h - thumb_h) * state->downloads_scroll
+                              / (cnt - UI_MAX_VISIBLE_ITEMS);
+        draw_rect(308, bar_y, 4, bar_h, rgba(COLOR_BG_CARD));
+        draw_rect(308, thumb_y, 4, thumb_h, rgba(COLOR_PRIMARY));
+    }
+
     for (int i = 0; i < UI_MAX_VISIBLE_ITEMS + 1 && i + state->downloads_scroll < cnt; i++) {
         int idx = state->downloads_scroll + i;
         float y = 30 + i * UI_LIST_ITEM_HEIGHT;
         bool sel = (idx == state->downloads_index);
 
-        draw_list_item_bg(y, 310, UI_LIST_ITEM_HEIGHT - 4, sel);
+        draw_list_item_bg(y, 306, UI_LIST_ITEM_HEIGHT - 4, sel);
 
         /* Truncate name to fit */
         char disp[40];
@@ -1877,7 +1964,7 @@ void ui_render_downloads(const ui_state_t *state)
         const char *type = s_dl_entries[idx].is_video ? "VID" : "CBZ";
         char meta[32];
         snprintf(meta, sizeof(meta), "%s %s", type, size_str);
-        draw_text(220, y + 4, 0.4f, rgba(COLOR_TEXT_SECONDARY), meta);
+        draw_text(218, y + 4, 0.4f, rgba(COLOR_TEXT_SECONDARY), meta);
     }
 
     draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),

@@ -319,18 +319,23 @@ static void net_thread_func(void *arg)
 
             /* Approximate byte-level seek for ±30s L/R buttons */
             int64_t dur = s_vp.duration_ticks;
-            if (s_vp.seek_offset_ticks > 0 && dur > 0) {
+            int64_t seek_hint = s_vp.seek_offset_ticks;
+            if (seek_hint > 0 && dur > 0) {
                 long seek_bytes = (long)((double)file_size *
-                    (double)s_vp.seek_offset_ticks / (double)dur);
+                    (double)seek_hint / (double)dur);
                 seek_bytes = (seek_bytes / 188) * 188;  /* align to TS packet boundary */
                 if (seek_bytes > 0 && seek_bytes < file_size) {
                     fseek(lf, seek_bytes, SEEK_SET);
                     log_write("NET: local seek to %ldB (%.1fs of %.1fs)",
                               seek_bytes,
-                              (double)s_vp.seek_offset_ticks / 10000000.0,
+                              (double)seek_hint / 10000000.0,
                               (double)dur / 10000000.0);
                 }
             }
+            /* Stream PTS already reflects the actual file position; zero out
+             * seek_offset_ticks so the decode thread doesn't double-add it. */
+            s_vp.seek_offset_ticks = 0;
+            s_vp.position_ticks = 0;
         }
 
         static char s_local_buf[65536];

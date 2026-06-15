@@ -26,11 +26,12 @@ static struct {
     volatile size_t total;
     volatile bool   cancel;
 
-    char save_path[192];        /* sdmc:/.../video_ITEMID.ts  */
+    char save_path[192];        /* sdmc:/.../video_ITEMID.ts or cbz_ITEMID.cbz */
     char meta_path[192];        /* sdmc:/.../video_ITEMID.txt */
     char url[2048];
     char item_name[256];
     char sub_name[128];         /* subtitle track name being burned in */
+    bool is_video;              /* false = book/CBZ download */
 } s_vdl;
 
 /* ── Download queue ─────────────────────────────────────────────────── */
@@ -44,6 +45,7 @@ typedef struct {
     char save_path[192];
     char meta_path[192];
     char sub_name[128];
+    bool is_video;
 } dl_q_item_t;
 
 static dl_q_item_t s_queue[DL_QUEUE_MAX];
@@ -75,6 +77,19 @@ static void vdl_thread_func(void *arg)
 
     mkdir("sdmc:/3ds", 0777);
     mkdir(VDL_DIR, 0777);
+
+    /* Book/CBZ: if already cached by the reader, just write .txt and done */
+    if (!s_vdl.is_video) {
+        FILE *test = fopen(s_vdl.save_path, "rb");
+        if (test) {
+            fclose(test);
+            log_write("VDL: book already cached %s", s_vdl.save_path);
+            FILE *meta = fopen(s_vdl.meta_path, "w");
+            if (meta) { fputs(s_vdl.item_name, meta); fclose(meta); }
+            s_vdl.state = DL_DONE;
+            return;
+        }
+    }
 
     log_write("VDL: downloading %s", s_vdl.url);
 
@@ -157,7 +172,26 @@ bool dl_queue_video(const char *item_id, const char *item_name,
     snprintf(q->meta_path, sizeof(q->meta_path), VDL_DIR "/video_%s.txt", item_id);
     strncpy(q->item_id, item_id, sizeof(q->item_id)-1);
     q->item_id[sizeof(q->item_id)-1] = '\0';
+    q->is_video = true;
     /* If idle, start immediately */
+    if (s_vdl.state == DL_IDLE) dl_process_queue();
+    return true;
+}
+
+bool dl_queue_book(const char *item_id, const char *display_name, const char *url)
+{
+    if (s_q_count >= DL_QUEUE_MAX) return false;
+    dl_q_item_t *q = &s_queue[s_q_count++];
+    strncpy(q->item_name, display_name, sizeof(q->item_name)-1);
+    q->item_name[sizeof(q->item_name)-1] = '\0';
+    strncpy(q->url, url, sizeof(q->url)-1);
+    q->url[sizeof(q->url)-1] = '\0';
+    q->sub_name[0] = '\0';
+    snprintf(q->save_path, sizeof(q->save_path), VDL_DIR "/cbz_%s.cbz", item_id);
+    snprintf(q->meta_path, sizeof(q->meta_path), VDL_DIR "/cbz_%s.txt", item_id);
+    strncpy(q->item_id, item_id, sizeof(q->item_id)-1);
+    q->item_id[sizeof(q->item_id)-1] = '\0';
+    q->is_video = false;
     if (s_vdl.state == DL_IDLE) dl_process_queue();
     return true;
 }
@@ -183,6 +217,7 @@ void dl_process_queue(void)
     s_vdl.meta_path[sizeof(s_vdl.meta_path)-1] = '\0';
     strncpy(s_vdl.sub_name, q->sub_name, sizeof(s_vdl.sub_name)-1);
     s_vdl.sub_name[sizeof(s_vdl.sub_name)-1] = '\0';
+    s_vdl.is_video = q->is_video;
 
     /* Shift queue */
     s_q_count--;
