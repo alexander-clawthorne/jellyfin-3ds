@@ -555,7 +555,6 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 if (strncmp(vs.error_msg, "Video not ready", 15) == 0
                     && state->video_retry_count < 3) {
                     if (state->video_retry_timer == 0) {
-                        state->video_retry_ticks = vs.position_ticks;
                         state->video_retry_timer = 180;
                     } else {
                         state->video_retry_timer--;
@@ -616,6 +615,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     video_player_stop();
                     state->video_retry_count = 0;
                     state->video_retry_timer = 0;
+                    state->video_retry_ticks = new_pos;
                     if (jfin_get_video_stream(session, state->now_playing.id, new_pos,
                                               mode_3d != VP_3D_NONE,
                                               state->subtitle_stream_index,
@@ -670,6 +670,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 video_player_stop();
                 state->video_retry_count = 0;
                 state->video_retry_timer = 0;
+                state->video_retry_ticks = resume_ticks;
                 jfin_stream_t sub_stream;
                 if (jfin_get_video_stream(session, state->now_playing.id, resume_ticks,
                                           sub_mode != VP_3D_NONE,
@@ -1152,9 +1153,33 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
         draw_text(30, 125, 0.38f, rgba(COLOR_TEXT_SECONDARY), diag);
     }
 
+    /* Subtitle status */
+    if (is_video) {
+        char sub_str[64];
+        if (state->subtitle_stream_index >= 0) {
+            const char *label = state->subtitle_lang_pref[0]
+                                ? state->subtitle_lang_pref : "on";
+            for (int si = 0; si < state->subtitle_list.count; si++) {
+                if (state->subtitle_list.subs[si].index == state->subtitle_stream_index) {
+                    if (state->subtitle_list.subs[si].title[0])
+                        label = state->subtitle_list.subs[si].title;
+                    break;
+                }
+            }
+            snprintf(sub_str, sizeof(sub_str), "Subs: %s%s",
+                     label, state->subtitle_sticky ? " (sticky)" : "");
+        } else {
+            snprintf(sub_str, sizeof(sub_str), "Subs: Off");
+        }
+        draw_text(30, 145, 0.4f, rgba(
+            state->subtitle_stream_index >= 0 ? COLOR_ACCENT : COLOR_TEXT_SECONDARY),
+            sub_str);
+    }
+
     /* Controls hint */
     draw_text(20, 180, 0.45f, rgba(COLOR_TEXT_PRIMARY),
-              "A:Pause X:Stop B:Back L/R:Seek");
+              is_video ? "A:Pause X:Stop B:Back L/R:Seek Y:Subs"
+                       : "A:Pause X:Stop B:Back L/R:Seek");
 }
 
 void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
