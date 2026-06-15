@@ -414,11 +414,12 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 } else if (is_container) {
                     ui_navigate_into(state, session, item);
                 } else if (item->type == JFIN_ITEM_BOOK) {
-                    state->now_playing    = *item;
-                    state->reader_page    = 0;
-                    state->reader_load_page = false; /* will set true once READY */
-                    state->previous_view  = state->current_view;
-                    state->current_view   = VIEW_READER;
+                    state->now_playing      = *item;
+                    state->reader_page      = 0;
+                    state->reader_load_page = false;
+                    state->reader_rotated   = false;
+                    state->previous_view    = state->current_view;
+                    state->current_view     = VIEW_READER;
                     reader_open_book(session, item->id);
                 }
                 /* JFIN_ITEM_UNKNOWN: do nothing */
@@ -791,6 +792,10 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 }
             }
         }
+
+        /* SELECT: toggle portrait/landscape reading orientation */
+        if (kdown & KEY_SELECT)
+            state->reader_rotated = !state->reader_rotated;
 
         /* B: back (cancel download if in progress) */
         if (kdown & KEY_B) {
@@ -1321,7 +1326,7 @@ void ui_render_reader(const ui_state_t *state)
     C2D_SceneBegin(s_top);
 
     if (reader_page_ready()) {
-        reader_draw(0, 0, TOP_SCREEN_WIDTH, TOP_SCREEN_HEIGHT);
+        reader_draw(0, 0, TOP_SCREEN_WIDTH, TOP_SCREEN_HEIGHT, state->reader_rotated);
     } else if (rs == READER_DOWNLOADING) {
         size_t total = reader_dl_total();
         size_t bytes = reader_dl_bytes();
@@ -1372,9 +1377,16 @@ void ui_render_reader(const ui_state_t *state)
                      state->reader_page + 1, total);
         else
             snprintf(pg_str, sizeof(pg_str), "Page %d", state->reader_page + 1);
-        draw_text(90, 110, 0.6f, rgba(COLOR_PRIMARY), pg_str);
-        draw_text(35, 200, 0.45f, rgba(COLOR_TEXT_PRIMARY),
-                  "L/R or D-pad: Turn page  B: Back");
+        draw_text(90, 95, 0.6f, rgba(COLOR_PRIMARY), pg_str);
+
+        /* Orientation indicator */
+        draw_text(90, 130, 0.42f,
+                  state->reader_rotated ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_SECONDARY),
+                  state->reader_rotated ? "Landscape (SELECT: normal)"
+                                        : "Portrait  (SELECT: landscape)");
+
+        draw_text(20, 200, 0.42f, rgba(COLOR_TEXT_PRIMARY),
+                  "L/R:Page  SELECT:Rotate  B:Back");
     }
 }
 

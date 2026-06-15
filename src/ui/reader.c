@@ -1,21 +1,17 @@
 /*
  * reader.c - Manga/comic CBZ reader
  *
- * Jellyfin never serves individual CBZ pages through its Images API.
- * The correct approach (matching the web client) is to download the full
- * CBZ archive via GET /Items/{id}/Download and parse it as a ZIP locally.
+ * Downloads the full CBZ archive from Jellyfin via /Items/{id}/Download
+ * (matching the web client which uses JSZip to extract pages client-side).
+ * Pages are cached on SD card by item ID so repeated opens are instant.
  *
- * Download happens in a background thread so the frame loop keeps running
- * and can show a progress indicator. Once the download finishes the thread
- * calls cbz_open() to index the pages and sets state to READER_READY.
- * From then on, reader_load_page() extracts pages synchronously (fast —
- * the CBZ is already on the SD card so it's just fseek + zlib inflate).
- *
- * Cache: the last downloaded CBZ is kept at:
- *   sdmc:/3ds/jellyfin-3ds/book.cbz
- * Re-opening the same book re-downloads if the file is missing; if the
- * file exists from a previous session it is re-parsed immediately without
- * downloading again (fast path).
+ * Performance notes:
+ *   - SD card write buffer is set to 512 KB via setvbuf() so libcurl's
+ *     write callbacks return immediately without waiting for disk I/O.
+ *     This prevents TCP receive-buffer back-pressure on the Jellyfin side.
+ *   - CURLOPT_BUFFERSIZE = 64 KB reduces callback frequency.
+ *   - Page turns: fseek + zlib inflate + nearest-neighbor scale + Morton
+ *     tile ~5–20 ms.  No network I/O after the first open.
  */
 
 #include <3ds.h>
@@ -24,6 +20,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <sys/stat.h>
+#include <math.h>
 #include <curl/curl.h>
 
 #include "ui/reader.h"
@@ -31,44 +28,58 @@
 #include "util/stb_image.h"
 #include "util/log.h"
 
-/* ── Texture dimensions ─────────────────────────────────────────────── */
-
 #define PAGE_TEX_W   512
 #define PAGE_TEX_H   512
-#define CACHE_PATH   "sdmc:/3ds/jellyfin-3ds/book.cbz"
-#define DL_STACK     (48 * 1024)   /* download thread stack */
-#define DL_PRIORITY  0x3C          /* slightly below main thread */
+#define CACHE_DIR    "sdmc:/3ds/jellyfin-3ds"
+#define DL_STACK     (48 * 1024)
+#define DL_PRIORITY  0x3C
+#define DL_WBUF_SZ   (512 * 1024)  /* stdio write buffer — keeps fwrite fast */
 
 /* ── State ──────────────────────────────────────────────────────────── */
 
 static struct {
-    /* GPU texture */
     C3D_Tex           tex;
     C2D_Image         img;
     Tex3DS_SubTexture subtex;
     bool              tex_init;
     bool              page_ready;
-    int               pw, ph;
+    int               pw, ph;       /* pixel dimensions of current page */
 
-    /* CBZ index */
     cbz_t             cbz;
     bool              cbz_open_flag;
 
-    /* Download thread */
     Thread              dl_thread;
     volatile int        state;       /* reader_state_t */
     volatile size_t     dl_bytes;
     volatile size_t     dl_total;
     volatile bool       cancel;
 
-    /* Params set by reader_open_book() before thread launch */
+    /* params set before thread launch */
     char server_url[JFIN_MAX_URL];
     char access_token[JFIN_MAX_TOKEN];
     char device_id[JFIN_MAX_ID];
-    char item_id[JFIN_MAX_ID];
+    char cache_path[160];           /* sdmc:/.../cbz_ITEMID.cbz */
 } s_rdr;
 
-/* ── Morton tiler (same formula as album_art.c) ─────────────────────── */
+/* ── Nearest-neighbour scale ─────────────────────────────────────────── */
+
+static u8 *scale_rgb(const u8 *src, int sw, int sh, int dw, int dh)
+{
+    u8 *dst = malloc((size_t)(dw * dh * 3));
+    if (!dst) return NULL;
+    for (int dy = 0; dy < dh; dy++) {
+        int sy = dy * sh / dh;
+        for (int dx = 0; dx < dw; dx++) {
+            int sx = dx * sw / dw;
+            const u8 *s = src + (sy * sw + sx) * 3;
+            u8       *d = dst + (dy * dw + dx) * 3;
+            d[0] = s[0]; d[1] = s[1]; d[2] = s[2];
+        }
+    }
+    return dst;
+}
+
+/* ── Morton tiler (Z-order, 8×8 tiles) ─────────────────────────────── */
 
 static void upload_page(const u16 *pixels, int sw, int sh)
 {
@@ -96,6 +107,8 @@ static size_t dl_write_cb(void *ptr, size_t sz, size_t nmemb, void *ud)
 {
     FILE *fp = (FILE *)ud;
     size_t n = sz * nmemb;
+    /* fwrite returns immediately to stdio buffer; actual disk write is
+     * deferred until the 512 KB buffer fills — prevents TCP back-pressure */
     size_t written = fwrite(ptr, 1, n, fp);
     s_rdr.dl_bytes += written;
     return written;
@@ -106,7 +119,7 @@ static int dl_progress_cb(void *ud, curl_off_t total, curl_off_t now,
 {
     (void)ud; (void)u; (void)v;
     if (total > 0) s_rdr.dl_total = (size_t)total;
-    return s_rdr.cancel ? 1 : 0;   /* non-zero aborts transfer */
+    return s_rdr.cancel ? 1 : 0;
 }
 
 /* ── Download thread ────────────────────────────────────────────────── */
@@ -115,10 +128,48 @@ static void dl_thread_func(void *arg)
 {
     (void)arg;
 
-    /* Compose download URL */
+    /* Check cache: if file already exists and is a valid ZIP, skip download */
+    {
+        FILE *test = fopen(s_rdr.cache_path, "rb");
+        if (test) {
+            fclose(test);
+            log_write("CBZ: found cached %s", s_rdr.cache_path);
+            if (s_rdr.cbz_open_flag) { cbz_close(&s_rdr.cbz); s_rdr.cbz_open_flag = false; }
+            if (cbz_open(&s_rdr.cbz, s_rdr.cache_path)) {
+                s_rdr.cbz_open_flag = true;
+                s_rdr.page_ready    = false;
+                s_rdr.state         = READER_READY;
+                log_write("CBZ: cache hit — %d pages", s_rdr.cbz.count);
+                return;
+            }
+            /* Corrupt or incomplete — delete and re-download */
+            log_write("CBZ: cache invalid, re-downloading");
+            remove(s_rdr.cache_path);
+        }
+    }
+
     char url[JFIN_URL_BUF];
-    snprintf(url, sizeof(url), "%s/Items/%s/Download",
-             s_rdr.server_url, s_rdr.item_id);
+    snprintf(url, sizeof(url), "%s/Items/%.*s/Download",
+             s_rdr.server_url,
+             /* item id is embedded in cache_path after the prefix */
+             0, "");
+    /* Re-derive item_id from cache_path: "sdmc:/.../cbz_XXXX.cbz" */
+    {
+        const char *base = strrchr(s_rdr.cache_path, '/');
+        base = base ? base + 1 : s_rdr.cache_path;
+        /* base = "cbz_ITEMID.cbz"; skip "cbz_" prefix */
+        char item_id[JFIN_MAX_ID] = {0};
+        if (strncmp(base, "cbz_", 4) == 0) {
+            const char *id_start = base + 4;
+            const char *dot = strrchr(id_start, '.');
+            int len = dot ? (int)(dot - id_start) : (int)strlen(id_start);
+            if (len > 0 && len < JFIN_MAX_ID) {
+                memcpy(item_id, id_start, (size_t)len);
+            }
+        }
+        snprintf(url, sizeof(url), "%s/Items/%s/Download",
+                 s_rdr.server_url, item_id);
+    }
 
     char auth[640];
     snprintf(auth, sizeof(auth),
@@ -131,31 +182,37 @@ static void dl_thread_func(void *arg)
 
     log_write("CBZ: downloading %s", url);
 
-    /* Ensure cache directory exists */
     mkdir("sdmc:/3ds", 0777);
-    mkdir("sdmc:/3ds/jellyfin-3ds", 0777);
+    mkdir(CACHE_DIR, 0777);
 
-    FILE *fp = fopen(CACHE_PATH, "wb");
+    FILE *fp = fopen(s_rdr.cache_path, "wb");
     if (!fp) {
-        log_write("CBZ: cannot create " CACHE_PATH);
+        log_write("CBZ: cannot create %s", s_rdr.cache_path);
         s_rdr.state = READER_ERROR;
         return;
     }
 
+    /* Large stdio write buffer — critical for download speed on 3DS.
+     * Without this each 16 KB curl chunk triggers a direct SD card write,
+     * causing TCP receive-buffer stalls and ~20 KB/s throughput instead of
+     * the expected 500+ KB/s. */
+    static char s_dl_wbuf[DL_WBUF_SZ];
+    setvbuf(fp, s_dl_wbuf, _IOFBF, DL_WBUF_SZ);
+
     CURL *curl = curl_easy_init();
-    if (!curl) { fclose(fp); remove(CACHE_PATH); s_rdr.state = READER_ERROR; return; }
+    if (!curl) { fclose(fp); remove(s_rdr.cache_path); s_rdr.state = READER_ERROR; return; }
 
     struct curl_slist *hdrs = curl_slist_append(NULL, auth);
-    curl_easy_setopt(curl, CURLOPT_URL,               url);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER,         hdrs);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,      dl_write_cb);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA,          fp);
-    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION,   dl_progress_cb);
-    curl_easy_setopt(curl, CURLOPT_NOPROGRESS,         0L);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION,     1L);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER,     0L);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT,     30L);
-    /* No overall timeout — CBZ files can be large */
+    curl_easy_setopt(curl, CURLOPT_URL,              url);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER,        hdrs);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,     dl_write_cb);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA,         fp);
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION,  dl_progress_cb);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS,        0L);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION,    1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER,    0L);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT,    30L);
+    curl_easy_setopt(curl, CURLOPT_BUFFERSIZE,        65536L);
 
     CURLcode rc = curl_easy_perform(curl);
     long http_code = 0;
@@ -169,51 +226,47 @@ static void dl_thread_func(void *arg)
               (int)rc, http_code, s_rdr.dl_bytes);
 
     if (s_rdr.cancel) {
-        remove(CACHE_PATH);
+        remove(s_rdr.cache_path);
         s_rdr.state = READER_IDLE;
         return;
     }
     if (rc != CURLE_OK) {
         log_write("CBZ: curl error: %s", curl_easy_strerror(rc));
-        remove(CACHE_PATH);
+        remove(s_rdr.cache_path);
         s_rdr.state = READER_ERROR;
         return;
     }
     if (http_code < 200 || http_code >= 300) {
-        log_write("CBZ: HTTP %ld — check auth / item ID", http_code);
-        remove(CACHE_PATH);
+        log_write("CBZ: server returned HTTP %ld", http_code);
+        remove(s_rdr.cache_path);
         s_rdr.state = READER_ERROR;
         return;
     }
     if (s_rdr.dl_bytes < 22) {
-        log_write("CBZ: downloaded file too small (%zu bytes)", s_rdr.dl_bytes);
-        remove(CACHE_PATH);
+        log_write("CBZ: file too small (%zu bytes)", s_rdr.dl_bytes);
+        remove(s_rdr.cache_path);
         s_rdr.state = READER_ERROR;
         return;
     }
 
-    /* Parse ZIP central directory */
-    if (s_rdr.cbz_open_flag) {
-        cbz_close(&s_rdr.cbz);
-        s_rdr.cbz_open_flag = false;
-    }
-    if (!cbz_open(&s_rdr.cbz, CACHE_PATH)) {
-        log_write("CBZ: failed to parse ZIP structure");
+    if (s_rdr.cbz_open_flag) { cbz_close(&s_rdr.cbz); s_rdr.cbz_open_flag = false; }
+    if (!cbz_open(&s_rdr.cbz, s_rdr.cache_path)) {
+        log_write("CBZ: ZIP parse failed");
         s_rdr.state = READER_ERROR;
         return;
     }
     s_rdr.cbz_open_flag = true;
     s_rdr.page_ready    = false;
-    s_rdr.state = READER_READY;
+    s_rdr.state         = READER_READY;
     log_write("CBZ: ready — %d pages", s_rdr.cbz.count);
 }
 
-/* ── Thread lifecycle helpers ───────────────────────────────────────── */
+/* ── Thread helpers ─────────────────────────────────────────────────── */
 
 static void join_dl_thread(void)
 {
     if (s_rdr.dl_thread) {
-        threadJoin(s_rdr.dl_thread, (u64)30e9);  /* 30s timeout */
+        threadJoin(s_rdr.dl_thread, (u64)30e9);
         threadFree(s_rdr.dl_thread);
         s_rdr.dl_thread = NULL;
     }
@@ -247,7 +300,6 @@ void reader_cleanup(void)
 
 void reader_open_book(const jfin_session_t *session, const char *item_id)
 {
-    /* Cancel and join any existing download */
     if (s_rdr.state == READER_DOWNLOADING) {
         s_rdr.cancel = true;
         join_dl_thread();
@@ -256,20 +308,20 @@ void reader_open_book(const jfin_session_t *session, const char *item_id)
         join_dl_thread();
     }
 
-    /* Reset state */
     s_rdr.dl_bytes   = 0;
     s_rdr.dl_total   = 0;
     s_rdr.page_ready = false;
 
-    /* Copy params for the thread */
     strncpy(s_rdr.server_url,   session->server_url,   JFIN_MAX_URL   - 1);
     strncpy(s_rdr.access_token, session->access_token, JFIN_MAX_TOKEN - 1);
     strncpy(s_rdr.device_id,    session->device_id,    JFIN_MAX_ID    - 1);
-    strncpy(s_rdr.item_id,      item_id,               JFIN_MAX_ID    - 1);
-    s_rdr.server_url[JFIN_MAX_URL - 1]   = '\0';
+    s_rdr.server_url[JFIN_MAX_URL - 1]     = '\0';
     s_rdr.access_token[JFIN_MAX_TOKEN - 1] = '\0';
-    s_rdr.device_id[JFIN_MAX_ID - 1]     = '\0';
-    s_rdr.item_id[JFIN_MAX_ID - 1]       = '\0';
+    s_rdr.device_id[JFIN_MAX_ID - 1]       = '\0';
+
+    /* Cache file named by item ID so different books don't overwrite each other */
+    snprintf(s_rdr.cache_path, sizeof(s_rdr.cache_path),
+             CACHE_DIR "/cbz_%s.cbz", item_id);
 
     s_rdr.state = READER_DOWNLOADING;
     s_rdr.dl_thread = threadCreate(dl_thread_func, NULL, DL_STACK,
@@ -295,45 +347,70 @@ bool reader_load_page(int page_index)
     size_t data_sz = 0;
     u8 *data = cbz_page_data(&s_rdr.cbz, page_index, &data_sz);
     if (!data) {
-        log_write("CBZ: cbz_page_data failed for page %d", page_index);
+        log_write("CBZ: cbz_page_data failed page %d", page_index);
         return false;
     }
 
-    int w, h, ch;
-    u8 *rgb = stbi_load_from_memory(data, (int)data_sz, &w, &h, &ch, 3);
+    int img_w, img_h, ch;
+    u8 *rgb = stbi_load_from_memory(data, (int)data_sz, &img_w, &img_h, &ch, 3);
     free(data);
     if (!rgb) {
-        log_write("CBZ: stbi decode failed page %d", page_index);
+        log_write("CBZ: stbi decode failed page %d (%zu bytes)", page_index, data_sz);
         return false;
     }
 
-    if (w > PAGE_TEX_W) w = PAGE_TEX_W;
-    if (h > PAGE_TEX_H) h = PAGE_TEX_H;
+    /* Scale to fit within PAGE_TEX_W × PAGE_TEX_H maintaining aspect ratio.
+     * Without this we were passing the wrong stride to the RGB565 loop:
+     * a 1800-wide image's first 512×512 pixels span ~145 rows of the
+     * original, producing a garbled/static-noise result. */
+    int tex_w = img_w, tex_h = img_h;
+    bool was_scaled = false;
+
+    if (img_w > PAGE_TEX_W || img_h > PAGE_TEX_H) {
+        float scale = fminf((float)PAGE_TEX_W / img_w, (float)PAGE_TEX_H / img_h);
+        tex_w = (int)(img_w * scale);
+        tex_h = (int)(img_h * scale);
+        if (tex_w < 1) tex_w = 1;
+        if (tex_h < 1) tex_h = 1;
+        if (tex_w > PAGE_TEX_W) tex_w = PAGE_TEX_W;
+        if (tex_h > PAGE_TEX_H) tex_h = PAGE_TEX_H;
+
+        u8 *scaled = scale_rgb(rgb, img_w, img_h, tex_w, tex_h);
+        stbi_image_free(rgb);
+        rgb = scaled;
+        was_scaled = true;
+        if (!rgb) return false;
+    }
 
     /* RGB888 → RGB565 */
-    u16 *rgb565 = malloc((size_t)(w * h * 2));
-    if (!rgb565) { stbi_image_free(rgb); return false; }
-    for (int i = 0; i < w * h; i++) {
+    u16 *rgb565 = malloc((size_t)(tex_w * tex_h * 2));
+    if (!rgb565) {
+        if (was_scaled) free(rgb); else stbi_image_free(rgb);
+        return false;
+    }
+    for (int i = 0; i < tex_w * tex_h; i++) {
         u8 r = rgb[i * 3], g = rgb[i * 3 + 1], b = rgb[i * 3 + 2];
         rgb565[i] = (u16)(((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3));
     }
-    stbi_image_free(rgb);
+    if (was_scaled) free(rgb); else stbi_image_free(rgb);
 
+    /* Upload to GPU texture */
     memset(s_rdr.tex.data, 0, PAGE_TEX_W * PAGE_TEX_H * 2);
-    upload_page(rgb565, w, h);
+    upload_page(rgb565, tex_w, tex_h);
     free(rgb565);
 
-    s_rdr.subtex.width  = (u16)w;
-    s_rdr.subtex.height = (u16)h;
+    s_rdr.subtex.width  = (u16)tex_w;
+    s_rdr.subtex.height = (u16)tex_h;
     s_rdr.subtex.left   = 0.0f;
     s_rdr.subtex.top    = 1.0f;
-    s_rdr.subtex.right  = (float)w / PAGE_TEX_W;
-    s_rdr.subtex.bottom = 1.0f - (float)h / PAGE_TEX_H;
+    s_rdr.subtex.right  = (float)tex_w / PAGE_TEX_W;
+    s_rdr.subtex.bottom = 1.0f - (float)tex_h / PAGE_TEX_H;
 
-    s_rdr.pw         = w;
-    s_rdr.ph         = h;
+    s_rdr.pw         = tex_w;
+    s_rdr.ph         = tex_h;
     s_rdr.page_ready = true;
-    log_write("CBZ: page %d loaded (%dx%d)", page_index, w, h);
+    log_write("CBZ: page %d loaded (orig %dx%d → tex %dx%d)",
+              page_index, img_w, img_h, tex_w, tex_h);
     return true;
 }
 
@@ -343,16 +420,36 @@ size_t         reader_dl_total(void)   { return s_rdr.dl_total; }
 int            reader_page_count(void) { return s_rdr.cbz_open_flag ? s_rdr.cbz.count : 0; }
 bool           reader_page_ready(void) { return s_rdr.page_ready; }
 
-void reader_draw(float x, float y, float w, float h)
+void reader_draw(float x, float y, float w, float h, bool rotated)
 {
     if (!s_rdr.page_ready) return;
-    float sx = w / (float)s_rdr.pw;
-    float sy = h / (float)s_rdr.ph;
-    float sc = sx < sy ? sx : sy;
-    float dw = s_rdr.pw * sc;
-    float dh = s_rdr.ph * sc;
-    C2D_DrawImageAt(s_rdr.img,
-                    x + (w - dw) * 0.5f,
-                    y + (h - dh) * 0.5f,
-                    0.5f, NULL, sc, sc);
+
+    if (!rotated) {
+        /* Portrait/normal: scale image to fit in screen rect */
+        float sx = w / (float)s_rdr.pw;
+        float sy = h / (float)s_rdr.ph;
+        float sc = sx < sy ? sx : sy;
+        float dw = s_rdr.pw * sc;
+        float dh = s_rdr.ph * sc;
+        C2D_DrawImageAt(s_rdr.img,
+                        x + (w - dw) * 0.5f,
+                        y + (h - dh) * 0.5f,
+                        0.5f, NULL, sc, sc);
+    } else {
+        /* Landscape/rotated: 90° CCW rotation so the page fills a
+         * portrait-oriented view on the landscape 3DS screen.
+         * The user turns the 3DS clockwise; we rotate content CCW. */
+        float sc = fminf(h / (float)s_rdr.pw, w / (float)s_rdr.ph);
+        float dw = s_rdr.pw * sc;
+        float dh = s_rdr.ph * sc;
+        float cx = x + w * 0.5f;
+        float cy = y + h * 0.5f;
+        C2D_DrawParams p = {
+            { cx, cy, 0.5f },
+            { dw * 0.5f, dh * 0.5f },
+            dw, dh,
+            (float)(M_PI * 0.5)
+        };
+        C2D_DrawImage(s_rdr.img, &p, NULL);
+    }
 }
