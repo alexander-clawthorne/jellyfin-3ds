@@ -88,10 +88,14 @@ bool demux_init(demux_ctx_t *ctx)
     /* Probe and open the TS stream */
     const AVInputFormat *input_fmt = av_find_input_format("mpegts");
 
-    /* Speed up format detection: 32KB probe + 0.5s analysis is enough for TS */
+    /* Large probe budget: subtitle burn-in transcodes delay video output by
+     * 2-5s while the server-side filter chain initialises, so we must wait
+     * for enough data to include the first video packet with SPS/PPS.
+     * For normal streams these limits are never reached (probe exits early
+     * once all stream info is found). */
     AVDictionary *opts = NULL;
-    av_dict_set(&opts, "probesize", "32768", 0);
-    av_dict_set(&opts, "analyzeduration", "500000", 0);
+    av_dict_set(&opts, "probesize", "524288", 0);
+    av_dict_set(&opts, "analyzeduration", "10000000", 0);
 
     int ret = avformat_open_input(&fmt_ctx, NULL, input_fmt, &opts);
     av_dict_free(&opts);

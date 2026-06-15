@@ -120,6 +120,25 @@ static int settings_next_selectable(int from, int dir)
     return n;
 }
 
+/* ── Subtitle helpers ──────────────────────────────────────────────── */
+
+static void apply_sticky_subtitle(ui_state_t *state, const jfin_session_t *session,
+                                  const char *item_id)
+{
+    state->subtitle_stream_index = -1;
+    state->subtitle_list_loaded = false;
+    if (!state->subtitle_sticky || state->subtitle_lang_pref[0] == '\0') return;
+    if (!jfin_get_subtitle_streams(session, item_id, &state->subtitle_list)) return;
+    state->subtitle_list_loaded = true;
+    for (int i = 0; i < state->subtitle_list.count; i++) {
+        if (strcmp(state->subtitle_list.subs[i].language,
+                   state->subtitle_lang_pref) == 0) {
+            state->subtitle_stream_index = state->subtitle_list.subs[i].index;
+            return;
+        }
+    }
+}
+
 /* ── Lifecycle ─────────────────────────────────────────────────────── */
 
 bool ui_init(void)
@@ -346,9 +365,14 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                         /* Video playback on New 3DS */
                         vp_3d_mode_t mode_3d = item_3d_mode(item);
                         audio_player_stop();
+                        apply_sticky_subtitle(state, session, item->id);
                         jfin_stream_t stream;
+                        state->video_retry_count = 0;
+                        state->video_retry_timer = 0;
                         if (jfin_get_video_stream(session, item->id, 0,
-                                                  mode_3d != VP_3D_NONE, &stream) &&
+                                                  mode_3d != VP_3D_NONE,
+                                                  state->subtitle_stream_index,
+                                                  &stream) &&
                             video_player_play(stream.url, item->runtime_ticks, 0, mode_3d)) {
                             state->now_playing = *item;
                             state->has_now_playing = true;
@@ -472,9 +496,14 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                         vp_3d_mode_t next_mode = item_3d_mode(next_item);
                         jfin_stream_t stream;
                         bool started = false;
+                        apply_sticky_subtitle(state, session, next_item->id);
                         if (next_is_video && video_player_is_supported()) {
+                            state->video_retry_count = 0;
+                            state->video_retry_timer = 0;
                             if (jfin_get_video_stream(session, next_item->id, 0,
-                                                      next_mode != VP_3D_NONE, &stream) &&
+                                                      next_mode != VP_3D_NONE,
+                                                      state->subtitle_stream_index,
+                                                      &stream) &&
                                 video_player_play(stream.url, next_item->runtime_ticks, 0, next_mode)) {
                                 started = true;
                             } else if (jfin_get_audio_stream(session, next_item->id, 0, &stream)) {
@@ -512,13 +541,39 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             bool vid_active = (vs.state == VIDEO_PLAYING || vs.state == VIDEO_PAUSED ||
                                vs.state == VIDEO_LOADING);
 
-            /* Error state: any button press stops and returns to browse */
+            /* Error state */
             if (vs.state == VIDEO_ERROR) {
                 if (kdown) {
+                    state->video_retry_count = 0;
+                    state->video_retry_timer = 0;
                     video_player_stop();
                     audio_player_stop();
                     state->has_now_playing = false;
                     state->current_view = state->previous_view;
+                    break;
+                }
+                if (strncmp(vs.error_msg, "Video not ready", 15) == 0
+                    && state->video_retry_count < 3) {
+                    if (state->video_retry_timer == 0) {
+                        state->video_retry_ticks = vs.position_ticks;
+                        state->video_retry_timer = 180;
+                    } else {
+                        state->video_retry_timer--;
+                        if (state->video_retry_timer == 0) {
+                            state->video_retry_count++;
+                            vp_3d_mode_t retry_mode = item_3d_mode(&state->now_playing);
+                            jfin_stream_t retry_stream;
+                            if (jfin_get_video_stream(session, state->now_playing.id,
+                                                      state->video_retry_ticks,
+                                                      retry_mode != VP_3D_NONE,
+                                                      state->subtitle_stream_index,
+                                                      &retry_stream))
+                                video_player_play(retry_stream.url,
+                                                  state->now_playing.runtime_ticks,
+                                                  state->video_retry_ticks,
+                                                  retry_mode);
+                        }
+                    }
                 }
                 break;
             }
@@ -559,14 +614,68 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 if (vid_active) {
                     vp_3d_mode_t mode_3d = item_3d_mode(&state->now_playing);
                     video_player_stop();
+                    state->video_retry_count = 0;
+                    state->video_retry_timer = 0;
                     if (jfin_get_video_stream(session, state->now_playing.id, new_pos,
-                                              mode_3d != VP_3D_NONE, &stream))
+                                              mode_3d != VP_3D_NONE,
+                                              state->subtitle_stream_index,
+                                              &stream))
                         video_player_play(stream.url, state->now_playing.runtime_ticks, new_pos, mode_3d);
                 } else {
                     audio_player_stop();
                     if (jfin_get_audio_stream(session, state->now_playing.id, new_pos, &stream))
                         audio_player_play(stream.url, state->now_playing.runtime_ticks, new_pos);
                 }
+            }
+            /* Y to cycle subtitle tracks */
+            if ((kdown & KEY_Y) && vid_active) {
+                if (!state->subtitle_list_loaded) {
+                    if (jfin_get_subtitle_streams(session, state->now_playing.id,
+                                                  &state->subtitle_list))
+                        state->subtitle_list_loaded = true;
+                }
+                int next_index = -1;
+                if (state->subtitle_stream_index < 0) {
+                    if (state->subtitle_list_loaded && state->subtitle_list.count > 0)
+                        next_index = state->subtitle_list.subs[0].index;
+                } else {
+                    int cur_pos = -1;
+                    for (int si = 0; si < state->subtitle_list.count; si++) {
+                        if (state->subtitle_list.subs[si].index == state->subtitle_stream_index) {
+                            cur_pos = si; break;
+                        }
+                    }
+                    if (cur_pos < 0 || cur_pos >= state->subtitle_list.count - 1)
+                        next_index = -1;
+                    else
+                        next_index = state->subtitle_list.subs[cur_pos + 1].index;
+                }
+                state->subtitle_stream_index = next_index;
+                if (next_index >= 0) {
+                    state->subtitle_sticky = true;
+                    for (int si = 0; si < state->subtitle_list.count; si++) {
+                        if (state->subtitle_list.subs[si].index == next_index) {
+                            snprintf(state->subtitle_lang_pref,
+                                     sizeof(state->subtitle_lang_pref),
+                                     "%s", state->subtitle_list.subs[si].language);
+                            break;
+                        }
+                    }
+                } else {
+                    state->subtitle_sticky = false;
+                    state->subtitle_lang_pref[0] = '\0';
+                }
+                int64_t resume_ticks = vs.position_ticks;
+                vp_3d_mode_t sub_mode = item_3d_mode(&state->now_playing);
+                video_player_stop();
+                state->video_retry_count = 0;
+                state->video_retry_timer = 0;
+                jfin_stream_t sub_stream;
+                if (jfin_get_video_stream(session, state->now_playing.id, resume_ticks,
+                                          sub_mode != VP_3D_NONE,
+                                          state->subtitle_stream_index, &sub_stream))
+                    video_player_play(sub_stream.url, state->now_playing.runtime_ticks,
+                                      resume_ticks, sub_mode);
             }
             /* B to go back to browse */
             if (kdown & KEY_B) {
@@ -601,9 +710,14 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                             vp_3d_mode_t next_mode = item_3d_mode(next_item);
                             jfin_stream_t stream;
                             bool started = false;
+                            apply_sticky_subtitle(state, session, next_item->id);
                             if (next_is_video && video_player_is_supported()) {
+                                state->video_retry_count = 0;
+                                state->video_retry_timer = 0;
                                 if (jfin_get_video_stream(session, next_item->id, 0,
-                                                          next_mode != VP_3D_NONE, &stream) &&
+                                                          next_mode != VP_3D_NONE,
+                                                          state->subtitle_stream_index,
+                                                          &stream) &&
                                     video_player_play(stream.url, next_item->runtime_ticks, 0, next_mode)) {
                                     started = true;
                                 } else if (jfin_get_audio_stream(session, next_item->id, 0, &stream)) {
@@ -908,14 +1022,27 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     }
 
     if (is_video && vstatus.state == VIDEO_ERROR) {
-        /* Show error prominently on top screen */
-        draw_text(50, 60, 0.7f, rgba(0xFF4444FF), "Playback Error");
-        draw_text(30, 100, 0.5f, rgba(COLOR_TEXT_PRIMARY),
-                  vstatus.error_msg[0] ? vstatus.error_msg : "Cannot play this content");
-        draw_text(30, 140, 0.5f, rgba(COLOR_TEXT_SECONDARY),
-                  state->now_playing.name);
-        draw_text(60, 190, 0.45f, rgba(COLOR_TEXT_SECONDARY),
-                  "Press any button to go back");
+        bool retrying = (strncmp(vstatus.error_msg, "Video not ready", 15) == 0)
+                        && state->video_retry_count < 3
+                        && state->video_retry_timer > 0;
+        if (retrying) {
+            int secs = (state->video_retry_timer + 59) / 60;
+            char rbuf[48];
+            snprintf(rbuf, sizeof(rbuf), "Retrying in %ds (%d/3)...", secs,
+                     state->video_retry_count + 1);
+            draw_text(60, 80, 0.65f, rgba(COLOR_PRIMARY), "Subtitle transcode starting");
+            draw_text(40, 120, 0.5f, rgba(COLOR_TEXT_PRIMARY), rbuf);
+            draw_text(30, 155, 0.5f, rgba(COLOR_TEXT_SECONDARY), state->now_playing.name);
+            draw_text(60, 195, 0.45f, rgba(COLOR_TEXT_SECONDARY), "Press any button to cancel");
+        } else {
+            draw_text(50, 60, 0.7f, rgba(0xFF4444FF), "Playback Error");
+            draw_text(30, 100, 0.5f, rgba(COLOR_TEXT_PRIMARY),
+                      vstatus.error_msg[0] ? vstatus.error_msg : "Cannot play this content");
+            draw_text(30, 140, 0.5f, rgba(COLOR_TEXT_SECONDARY),
+                      state->now_playing.name);
+            draw_text(60, 190, 0.45f, rgba(COLOR_TEXT_SECONDARY),
+                      "Press any button to go back");
+        }
     } else if (is_video && vstatus.state == VIDEO_LOADING) {
         /* Show buffering indicator while video is loading */
         draw_text(130, 100, 0.7f, rgba(COLOR_PRIMARY), "Buffering...");
