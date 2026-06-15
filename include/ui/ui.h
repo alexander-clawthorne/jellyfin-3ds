@@ -51,6 +51,7 @@ typedef enum {
     VIEW_BROWSE,         /* browsing items within a library */
     VIEW_NOW_PLAYING,    /* audio playback screen */
     VIEW_SETTINGS,       /* settings / account / about */
+    VIEW_READER,         /* manga / comic page reader */
 } ui_view_t;
 
 /* ── UI State ────────────────────────────────────────────────────── */
@@ -104,6 +105,10 @@ typedef struct {
     int                  video_retry_count;  /* retries attempted for current play (max 3) */
     int                  video_retry_timer;  /* countdown frames before next retry */
     int64_t              video_retry_ticks;  /* seek position to use on retry */
+
+    /* Manga / comic reader */
+    int                  reader_page;        /* current page index (0-based) */
+    bool                 reader_loading;     /* page load pending on next update */
 } ui_state_t;
 
 /* ── Lifecycle ───────────────────────────────────────────────────── */
@@ -139,6 +144,7 @@ void ui_render_libraries(const ui_state_t *state);
 void ui_render_browse(const ui_state_t *state);
 void ui_render_now_playing(const ui_state_t *state, const player_status_t *player);
 void ui_render_settings(const ui_state_t *state, const jfin_session_t *session);
+void ui_render_reader(const ui_state_t *state);
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
 
