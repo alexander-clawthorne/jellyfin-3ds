@@ -42,6 +42,7 @@ bool config_load(jfin_config_t *config)
     config->video_bitrate = 472;
     config->prefer_transcoding = true;
     config->auto_advance = true;
+    config->bg_theme = 0;
 
     FILE *f = fopen(CONFIG_PATH, "r");
     if (!f) return false;
@@ -70,6 +71,10 @@ bool config_load(jfin_config_t *config)
         buf[0] = '\0';
         parse_line(line, "auto_advance", buf, sizeof(buf));
         if (buf[0] != '\0') config->auto_advance = (strcmp(buf, "1") == 0);
+
+        buf[0] = '\0';
+        parse_line(line, "bg_theme", buf, sizeof(buf));
+        if (buf[0] != '\0') config->bg_theme = atoi(buf);
     }
 
     fclose(f);
@@ -92,6 +97,7 @@ bool config_save(const jfin_config_t *config)
     fprintf(f, "video_bitrate=%d\n", config->video_bitrate);
     fprintf(f, "prefer_transcoding=%d\n", config->prefer_transcoding ? 1 : 0);
     fprintf(f, "auto_advance=%d\n", config->auto_advance ? 1 : 0);
+    fprintf(f, "bg_theme=%d\n", config->bg_theme);
 
     fclose(f);
     return true;

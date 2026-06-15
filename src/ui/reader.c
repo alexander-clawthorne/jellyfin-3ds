@@ -338,7 +338,7 @@ void reader_cancel(void)
         s_rdr.cancel = true;
 }
 
-bool reader_load_page(int page_index)
+bool reader_load_page(int page_index, bool rotated)
 {
     if (!s_rdr.tex_init || s_rdr.state != READER_READY || !s_rdr.cbz_open_flag)
         return false;
@@ -394,6 +394,22 @@ bool reader_load_page(int page_index)
     }
     if (was_scaled) free(rgb); else stbi_image_free(rgb);
 
+    /* Bake 90° CCW rotation into pixel data so reader_draw is a simple
+     * aspect-fit regardless of orientation.  C2D_DrawImage rotation is
+     * broken on 3DS (always produces a black screen). */
+    if (rotated) {
+        int rw = tex_h, rh = tex_w;
+        u16 *rd = malloc((size_t)(rw * rh * 2));
+        if (rd) {
+            for (int dy = 0; dy < rh; dy++)
+                for (int dx = 0; dx < rw; dx++)
+                    rd[dy * rw + dx] = rgb565[dx * tex_w + (tex_w - 1 - dy)];
+            free(rgb565);
+            rgb565 = rd;
+            int tmp = tex_w; tex_w = tex_h; tex_h = tmp;
+        }
+    }
+
     /* Upload to GPU texture */
     memset(s_rdr.tex.data, 0, PAGE_TEX_W * PAGE_TEX_H * 2);
     upload_page(rgb565, tex_w, tex_h);
@@ -420,36 +436,16 @@ size_t         reader_dl_total(void)   { return s_rdr.dl_total; }
 int            reader_page_count(void) { return s_rdr.cbz_open_flag ? s_rdr.cbz.count : 0; }
 bool           reader_page_ready(void) { return s_rdr.page_ready; }
 
-void reader_draw(float x, float y, float w, float h, bool rotated)
+void reader_draw(float x, float y, float w, float h)
 {
     if (!s_rdr.page_ready) return;
-
-    if (!rotated) {
-        /* Portrait/normal: scale image to fit in screen rect */
-        float sx = w / (float)s_rdr.pw;
-        float sy = h / (float)s_rdr.ph;
-        float sc = sx < sy ? sx : sy;
-        float dw = s_rdr.pw * sc;
-        float dh = s_rdr.ph * sc;
-        C2D_DrawImageAt(s_rdr.img,
-                        x + (w - dw) * 0.5f,
-                        y + (h - dh) * 0.5f,
-                        0.5f, NULL, sc, sc);
-    } else {
-        /* Landscape/rotated: 90° CCW rotation so the page fills a
-         * portrait-oriented view on the landscape 3DS screen.
-         * The user turns the 3DS clockwise; we rotate content CCW. */
-        float sc = fminf(h / (float)s_rdr.pw, w / (float)s_rdr.ph);
-        float dw = s_rdr.pw * sc;
-        float dh = s_rdr.ph * sc;
-        float cx = x + w * 0.5f;
-        float cy = y + h * 0.5f;
-        C2D_DrawParams p = {
-            { cx, cy, 0.5f },
-            { dw * 0.5f, dh * 0.5f },
-            dw, dh,
-            (float)(M_PI * 0.5)
-        };
-        C2D_DrawImage(s_rdr.img, &p, NULL);
-    }
+    float sx = w / (float)s_rdr.pw;
+    float sy = h / (float)s_rdr.ph;
+    float sc = sx < sy ? sx : sy;
+    float dw = s_rdr.pw * sc;
+    float dh = s_rdr.ph * sc;
+    C2D_DrawImageAt(s_rdr.img,
+                    x + (w - dw) * 0.5f,
+                    y + (h - dh) * 0.5f,
+                    0.5f, NULL, sc, sc);
 }

@@ -27,6 +27,7 @@ typedef struct {
     int  video_bitrate;      /* kbps, default 472 */
     bool prefer_transcoding; /* always transcode vs direct play */
     bool auto_advance;       /* auto-play next track, default true */
+    int  bg_theme;           /* 0=dark, 1=black, 2=white, 3=grey */
 } jfin_config_t;
 
 /**
