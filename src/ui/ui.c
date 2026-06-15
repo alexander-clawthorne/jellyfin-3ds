@@ -750,6 +750,27 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                                                   retry_mode);
                         }
                     }
+                } else if (!state->now_playing_offline
+                           && strncmp(vs.error_msg, "Video not ready", 15) == 0
+                           && state->video_retry_count >= max_retries
+                           && state->subtitle_stream_index >= 0) {
+                    /* Subtitle transcode timed out — fall back to no-subtitle at same position */
+                    state->subtitle_stream_index = -1;
+                    state->subtitle_sticky = false;
+                    state->subtitle_lang_pref[0] = '\0';
+                    state->video_retry_count = 0;
+                    state->video_retry_timer = 0;
+                    vp_3d_mode_t fb_mode = item_3d_mode(&state->now_playing);
+                    jfin_stream_t fb_stream;
+                    if (jfin_get_video_stream(session, state->now_playing.id,
+                                              state->video_retry_ticks,
+                                              fb_mode != VP_3D_NONE,
+                                              -1,
+                                              &fb_stream))
+                        video_player_play(fb_stream.url,
+                                          state->now_playing.runtime_ticks,
+                                          state->video_retry_ticks,
+                                          fb_mode);
                 }
                 break;
             }
@@ -792,9 +813,9 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     state->video_retry_count = 0;
                     state->video_retry_timer = 0;
                     if (state->now_playing_offline) {
-                        /* No true seeking in local TS — restart from beginning */
-                        state->video_retry_ticks = 0;
-                        video_player_play(state->now_playing_local_path, 0, 0, VP_3D_NONE);
+                        /* Seek by byte offset in local TS file (net_thread estimates position) */
+                        state->video_retry_ticks = new_pos;
+                        video_player_play(state->now_playing_local_path, 0, new_pos, VP_3D_NONE);
                     } else {
                         vp_3d_mode_t mode_3d = item_3d_mode(&state->now_playing);
                         state->video_retry_ticks = new_pos;
@@ -989,36 +1010,22 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             }
         }
 
-        /* Circle pad: horizontal pan always; vertical = zoom in normal, pan in split.
-         * Pan direction: stick right → image shifts left (pans viewport right),
-         * same as scrolling. Stick up → image shifts up (pans viewport down). */
+        /* Circle pad: horizontal + vertical pan in both modes.
+         * Push right → image shifts left. Push up → image shifts up. */
         if (rs == READER_READY && reader_page_ready()) {
             circlePosition circle;
             hidCircleRead(&circle);
             const float dead = 0.15f;
             float cx = (float)circle.dx / 155.0f;
             float cy = (float)circle.dy / 155.0f;
-            /* Horizontal: push right → viewport pans right → image moves left */
             if (cx >  dead) state->reader_pan_x -= 3.0f;
             else if (cx < -dead) state->reader_pan_x += 3.0f;
-            if (state->reader_split) {
-                /* Vertical scroll: push up → see higher on the page → image moves up */
-                if (cy >  dead) state->reader_pan_y += 3.0f;
-                else if (cy < -dead) state->reader_pan_y -= 3.0f;
-            } else {
-                /* Up = zoom in, down = zoom out */
-                if (cy > dead) {
-                    state->reader_zoom *= 1.02f;
-                    if (state->reader_zoom > 5.0f) state->reader_zoom = 5.0f;
-                } else if (cy < -dead) {
-                    state->reader_zoom *= 0.98f;
-                    if (state->reader_zoom < 0.2f) state->reader_zoom = 0.2f;
-                }
-            }
+            if (cy >  dead) state->reader_pan_y += 3.0f;
+            else if (cy < -dead) state->reader_pan_y -= 3.0f;
         }
 
-        /* D-pad Up/Down: zoom in/out (split mode only — normal mode uses circle pad) */
-        if (state->reader_split && rs == READER_READY && reader_page_ready()) {
+        /* D-pad Up/Down: zoom in/out in both normal and split mode */
+        if (rs == READER_READY && reader_page_ready()) {
             if (kdown & KEY_DUP) {
                 state->reader_zoom *= 1.1f;
                 if (state->reader_zoom > 5.0f) state->reader_zoom = 5.0f;
@@ -1413,10 +1420,12 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
             char rbuf[48];
             snprintf(rbuf, sizeof(rbuf), "Retrying in %ds (%d/%d)...", secs,
                      state->video_retry_count + 1, max_retries);
-            draw_text(60, 80, 0.65f, rgba(COLOR_PRIMARY), "Subtitle transcode starting");
-            draw_text(40, 120, 0.5f, rgba(COLOR_TEXT_PRIMARY), rbuf);
-            draw_text(30, 155, 0.5f, rgba(COLOR_TEXT_SECONDARY), state->now_playing.name);
-            draw_text(60, 195, 0.45f, rgba(COLOR_TEXT_SECONDARY), "Press any button to cancel");
+            draw_text(60, 70, 0.65f, rgba(COLOR_PRIMARY), "Subtitle transcode starting");
+            draw_text(40, 108, 0.5f, rgba(COLOR_TEXT_PRIMARY), rbuf);
+            draw_text(30, 143, 0.5f, rgba(COLOR_TEXT_SECONDARY), state->now_playing.name);
+            draw_text(35, 178, 0.4f, rgba(COLOR_TEXT_SECONDARY),
+                      "Will retry without subs if it keeps failing");
+            draw_text(60, 200, 0.45f, rgba(COLOR_TEXT_SECONDARY), "Press any button to cancel");
         } else {
             draw_text(50, 60, 0.7f, rgba(0xFF4444FF), "Playback Error");
             draw_text(30, 100, 0.5f, rgba(COLOR_TEXT_PRIMARY),
@@ -1729,7 +1738,7 @@ void ui_render_reader(const ui_state_t *state)
         /* Translucent hint strip at bottom edge */
         draw_rect(0, 228, 320, 12, rgba(0x00000099));
         draw_text(4, 229, 0.33f, rgba(COLOR_TEXT_SECONDARY),
-                  "START:exit  Circle:pan  L/R:page  B:normal");
+                  "START:normal  Dpad:Zoom  Circle:Pan  L/R:page");
     } else {
         /* Normal mode: bottom screen shows controls */
         C2D_TargetClear(s_bottom, bg_color());
@@ -1764,7 +1773,7 @@ void ui_render_reader(const ui_state_t *state)
             draw_text(5, 196, 0.38f, rgba(COLOR_TEXT_PRIMARY),
                       "L/R:Page  SEL:Rotate  START:Split  B:Back");
             draw_text(5, 213, 0.38f, rgba(COLOR_TEXT_SECONDARY),
-                      state->reader_split ? "Circle:Pan" : "Circle(U/D):Zoom  Circle(L/R):Pan");
+                      "Dpad(U/D):Zoom  Circle:Pan");
         }
     }
 }
