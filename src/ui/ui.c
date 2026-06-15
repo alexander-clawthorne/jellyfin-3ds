@@ -783,6 +783,9 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 state->reader_loading = true;
             }
         }
+        /* A: retry a failed page load */
+        if ((kdown & KEY_A) && !reader_is_ready() && !state->reader_loading)
+            state->reader_loading = true;
         if (kdown & KEY_B)
             state->current_view = state->previous_view;
         break;
@@ -1302,13 +1305,21 @@ void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
 
 void ui_render_reader(const ui_state_t *state)
 {
-    /* Top screen: black background + page image (or "Loading..." placeholder) */
+    /* Top screen: black background + page image */
     C2D_TargetClear(s_top, C2D_Color32(0, 0, 0, 255));
     C2D_SceneBegin(s_top);
     if (reader_is_ready()) {
         reader_draw(0, 0, TOP_SCREEN_WIDTH, TOP_SCREEN_HEIGHT);
+    } else if (state->reader_loading) {
+        draw_text(140, 105, 0.55f, rgba(COLOR_TEXT_SECONDARY), "Loading page...");
     } else {
-        draw_text(155, 110, 0.6f, rgba(COLOR_TEXT_SECONDARY), "Loading...");
+        /* Load attempt finished but nothing usable — surface the problem */
+        draw_text(110, 85,  0.55f, rgba(0xFF5555FF), "Page failed to load");
+        draw_text(60,  115, 0.42f, rgba(COLOR_TEXT_SECONDARY),
+                  "Check jellyfin.log on the SD card");
+        draw_text(60,  140, 0.42f, rgba(COLOR_TEXT_SECONDARY),
+                  "Books library may need a rescan");
+        draw_text(120, 170, 0.48f, rgba(COLOR_TEXT_PRIMARY), "A: Retry   B: Back");
     }
 
     /* Bottom screen: page counter + controls */
@@ -1357,7 +1368,9 @@ void ui_render(const ui_state_t *state, const jfin_session_t *session,
         C2D_SceneBegin(s_top);
 
         draw_text(100, 80, 1.0f, rgba(COLOR_PRIMARY), "Jellyfin 3DS");
-        draw_text(130, 120, 0.5f, rgba(COLOR_TEXT_SECONDARY), "v" JFIN_VERSION);
+        draw_text(168, 118, 0.48f, rgba(COLOR_TEXT_SECONDARY), "v" JFIN_VERSION);
+        draw_text(75, 145, 0.4f, rgba(COLOR_ACCENT),
+                  "Subtitles (Y)  •  Manga Reader  •  3D");
 
         /* Show mini now-playing bar if something is playing */
         if (state->has_now_playing && player->state == PLAYER_PLAYING) {

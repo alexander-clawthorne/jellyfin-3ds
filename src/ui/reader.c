@@ -149,13 +149,30 @@ bool reader_load_page(const jfin_session_t *session,
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
 
+    log_write("READER: GET p%d %s", page_index, url);
+
     CURLcode rc = curl_easy_perform(curl);
+    long http_code = 0;
+    if (rc == CURLE_OK)
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
     curl_slist_free_all(hdrs);
     curl_easy_cleanup(curl);
 
-    if (rc != CURLE_OK || dl.size == 0) {
-        log_write("READER: download failed (page %d): %s",
-                  page_index, curl_easy_strerror(rc));
+    log_write("READER: p%d curl=%d http=%ld bytes=%zu",
+              page_index, (int)rc, http_code, dl.size);
+
+    if (rc != CURLE_OK) {
+        log_write("READER: curl error: %s", curl_easy_strerror(rc));
+        free(dl.data);
+        return false;
+    }
+    if (http_code < 200 || http_code >= 300) {
+        log_write("READER: server returned HTTP %ld — check Books library scan", http_code);
+        free(dl.data);
+        return false;
+    }
+    if (dl.size == 0) {
+        log_write("READER: empty response for page %d", page_index);
         free(dl.data);
         return false;
     }
@@ -165,7 +182,8 @@ bool reader_load_page(const jfin_session_t *session,
     u8 *rgb = stbi_load_from_memory(dl.data, (int)dl.size, &w, &h, &ch, 3);
     free(dl.data);
     if (!rgb) {
-        log_write("READER: decode failed (page %d)", page_index);
+        log_write("READER: stbi decode failed p%d (got %zu bytes — may not be image data)",
+                  page_index, dl.size);
         return false;
     }
 
