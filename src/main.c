@@ -99,7 +99,8 @@ int main(int argc, char *argv[])
     /* Try restoring previous session */
     memset(&s_session, 0, sizeof(s_session));
     memset(&s_ui, 0, sizeof(s_ui));
-    s_ui.auto_advance = g_config.auto_advance;
+    s_ui.auto_advance  = g_config.auto_advance;
+    s_ui.reader_zoom   = 1.0f;
     s_ui.subtitle_stream_index = -1;   /* no subtitles by default */
 
     if (try_auto_login()) {
@@ -129,8 +130,8 @@ int main(int argc, char *argv[])
         touchPosition touch;
         hidTouchRead(&touch);
 
-        /* Exit on START */
-        if (kdown & KEY_START)
+        /* Exit on START (in reader, START toggles split mode instead) */
+        if ((kdown & KEY_START) && s_ui.current_view != VIEW_READER)
             break;
 
         /* Update */

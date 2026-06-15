@@ -29,17 +29,24 @@ typedef enum {
     DL_ERROR,
 } dl_state_t;
 
-/**
- * Start a background video download.
- * item_id   : Jellyfin item ID (used for the filename).
- * item_name : Human-readable title (saved to companion .txt).
- * url       : Full stream URL — api_key must be embedded in the query string.
- * If a download is already active it is cancelled first.
- */
-void dl_start_video(const char *item_id, const char *item_name, const char *url);
+/* Queue a video download. Returns true if added, false if queue full. */
+bool dl_queue_video(const char *item_id, const char *item_name,
+                    const char *url, const char *sub_track_name);
 
-/** Cancel the active download (aborts curl, removes partial file). */
+/* Start the next queued item if the downloader is idle. Call from main loop. */
+void dl_process_queue(void);
+
+/* Cancel the active download. */
 void dl_cancel(void);
+
+/* Number of items waiting in queue (not counting active download). */
+int dl_queue_count(void);
+
+/* Name of queued item at position idx (0 = next to download). */
+const char *dl_queue_item_name(int idx);
+
+/* Remove a queued item by index. */
+void dl_queue_remove(int idx);
 
 /** Free thread handle.  Call on shutdown. */
 void dl_cleanup(void);
@@ -48,6 +55,7 @@ dl_state_t  dl_get_state(void);
 size_t      dl_bytes(void);
 size_t      dl_total(void);
 const char *dl_item_name(void);
+const char *dl_sub_name(void);
 
 #ifdef __cplusplus
 }

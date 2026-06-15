@@ -30,7 +30,24 @@ static struct {
     char meta_path[192];        /* sdmc:/.../video_ITEMID.txt */
     char url[2048];
     char item_name[256];
+    char sub_name[128];         /* subtitle track name being burned in */
 } s_vdl;
+
+/* ── Download queue ─────────────────────────────────────────────────── */
+
+#define DL_QUEUE_MAX 10
+
+typedef struct {
+    char item_id[64];
+    char item_name[256];
+    char url[2048];
+    char save_path[192];
+    char meta_path[192];
+    char sub_name[128];
+} dl_q_item_t;
+
+static dl_q_item_t s_queue[DL_QUEUE_MAX];
+static int s_q_count = 0;
 
 /* ── Callbacks ──────────────────────────────────────────────────────── */
 
@@ -125,37 +142,70 @@ static void join_thread(void)
 
 /* ── Public API ─────────────────────────────────────────────────────── */
 
-void dl_start_video(const char *item_id, const char *item_name, const char *url)
+bool dl_queue_video(const char *item_id, const char *item_name,
+                    const char *url, const char *sub_track_name)
 {
-    if (s_vdl.state == DL_ACTIVE) {
-        s_vdl.cancel = true;
-        join_thread();
-        s_vdl.cancel = false;
-    } else {
-        join_thread();
-    }
+    if (s_q_count >= DL_QUEUE_MAX) return false;
+    dl_q_item_t *q = &s_queue[s_q_count++];
+    strncpy(q->item_name, item_name, sizeof(q->item_name)-1);
+    q->item_name[sizeof(q->item_name)-1] = '\0';
+    strncpy(q->url, url, sizeof(q->url)-1);
+    q->url[sizeof(q->url)-1] = '\0';
+    strncpy(q->sub_name, sub_track_name ? sub_track_name : "", sizeof(q->sub_name)-1);
+    q->sub_name[sizeof(q->sub_name)-1] = '\0';
+    snprintf(q->save_path, sizeof(q->save_path), VDL_DIR "/video_%s.ts", item_id);
+    snprintf(q->meta_path, sizeof(q->meta_path), VDL_DIR "/video_%s.txt", item_id);
+    strncpy(q->item_id, item_id, sizeof(q->item_id)-1);
+    q->item_id[sizeof(q->item_id)-1] = '\0';
+    /* If idle, start immediately */
+    if (s_vdl.state == DL_IDLE) dl_process_queue();
+    return true;
+}
+
+void dl_process_queue(void)
+{
+    if (s_vdl.state != DL_IDLE && s_vdl.state != DL_DONE && s_vdl.state != DL_ERROR)
+        return;
+    if (s_q_count == 0) return;
+
+    join_thread();  /* clean up previous thread handle */
+    s_vdl.state = DL_IDLE;  /* reset for fresh start */
+
+    dl_q_item_t *q = &s_queue[0];
+
+    strncpy(s_vdl.item_name, q->item_name, sizeof(s_vdl.item_name)-1);
+    s_vdl.item_name[sizeof(s_vdl.item_name)-1] = '\0';
+    strncpy(s_vdl.url, q->url, sizeof(s_vdl.url)-1);
+    s_vdl.url[sizeof(s_vdl.url)-1] = '\0';
+    strncpy(s_vdl.save_path, q->save_path, sizeof(s_vdl.save_path)-1);
+    s_vdl.save_path[sizeof(s_vdl.save_path)-1] = '\0';
+    strncpy(s_vdl.meta_path, q->meta_path, sizeof(s_vdl.meta_path)-1);
+    s_vdl.meta_path[sizeof(s_vdl.meta_path)-1] = '\0';
+    strncpy(s_vdl.sub_name, q->sub_name, sizeof(s_vdl.sub_name)-1);
+    s_vdl.sub_name[sizeof(s_vdl.sub_name)-1] = '\0';
+
+    /* Shift queue */
+    s_q_count--;
+    for (int i = 0; i < s_q_count; i++) s_queue[i] = s_queue[i+1];
 
     s_vdl.bytes  = 0;
     s_vdl.total  = 0;
     s_vdl.cancel = false;
-
-    strncpy(s_vdl.item_name, item_name, sizeof(s_vdl.item_name) - 1);
-    s_vdl.item_name[sizeof(s_vdl.item_name) - 1] = '\0';
-    strncpy(s_vdl.url, url, sizeof(s_vdl.url) - 1);
-    s_vdl.url[sizeof(s_vdl.url) - 1] = '\0';
-
-    snprintf(s_vdl.save_path, sizeof(s_vdl.save_path),
-             VDL_DIR "/video_%s.ts", item_id);
-    snprintf(s_vdl.meta_path, sizeof(s_vdl.meta_path),
-             VDL_DIR "/video_%s.txt", item_id);
-
     s_vdl.state  = DL_ACTIVE;
-    s_vdl.thread = threadCreate(vdl_thread_func, NULL, VDL_STACK,
-                                VDL_PRIORITY, -2, false);
+    s_vdl.thread = threadCreate(vdl_thread_func, NULL, VDL_STACK, VDL_PRIORITY, -2, false);
     if (!s_vdl.thread) {
         log_write("VDL: threadCreate failed");
         s_vdl.state = DL_ERROR;
     }
+}
+
+int         dl_queue_count(void)              { return s_q_count; }
+const char *dl_queue_item_name(int idx)       { return (idx >= 0 && idx < s_q_count) ? s_queue[idx].item_name : ""; }
+void        dl_queue_remove(int idx)
+{
+    if (idx < 0 || idx >= s_q_count) return;
+    s_q_count--;
+    for (int i = idx; i < s_q_count; i++) s_queue[i] = s_queue[i+1];
 }
 
 void dl_cancel(void)
@@ -174,3 +224,4 @@ dl_state_t  dl_get_state(void)  { return (dl_state_t)s_vdl.state; }
 size_t      dl_bytes(void)       { return s_vdl.bytes; }
 size_t      dl_total(void)       { return s_vdl.total; }
 const char *dl_item_name(void)   { return s_vdl.item_name; }
+const char *dl_sub_name(void)    { return s_vdl.sub_name; }
