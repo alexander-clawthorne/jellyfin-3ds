@@ -242,6 +242,7 @@ static jfin_item_type_t parse_item_type(const char *type_str)
     if (strcmp(type_str, "Series") == 0) return JFIN_ITEM_SERIES;
     if (strcmp(type_str, "Season") == 0) return JFIN_ITEM_SEASON;
     if (strcmp(type_str, "Episode") == 0) return JFIN_ITEM_EPISODE;
+    if (strcmp(type_str, "Book") == 0)    return JFIN_ITEM_BOOK;
     return JFIN_ITEM_UNKNOWN;
 }
 
@@ -255,6 +256,7 @@ static void parse_item(const cJSON *obj, jfin_item_t *item)
     item->year = json_get_int(obj, "ProductionYear", 0);
     item->index_number = json_get_int(obj, "IndexNumber", 0);
     item->runtime_ticks = json_get_int64(obj, "RunTimeTicks", 0);
+    item->page_count    = json_get_int(obj, "ChildCount", 0);
 
     /* Artist can be in AlbumArtist or Artists array */
     json_get_string(obj, "AlbumArtist", item->artist, sizeof(item->artist));
