@@ -141,14 +141,15 @@ static void dl_manager_delete(int idx)
 {
     if (idx < 0 || idx >= s_dl_count) return;
     remove(s_dl_entries[idx].path);
-    if (s_dl_entries[idx].is_video) {
-        /* Also remove companion txt */
-        const char *p = s_dl_entries[idx].path;
-        int plen = (int)strlen(p);
-        char txt[196];
-        snprintf(txt, sizeof(txt), "%.*s.txt", plen - 3, p); /* replace .ts with .txt */
-        remove(txt);
-    }
+    /* Also remove companion .txt */
+    const char *p = s_dl_entries[idx].path;
+    int plen = (int)strlen(p);
+    char txt[196];
+    if (s_dl_entries[idx].is_video)
+        snprintf(txt, sizeof(txt), "%.*s.txt", plen - 3, p); /* strip .ts, add .txt */
+    else
+        snprintf(txt, sizeof(txt), "%.*s.txt", plen - 4, p); /* strip .cbz, add .txt */
+    remove(txt);
 }
 
 static int dl_manager_count(void) { return s_dl_count; }
@@ -274,6 +275,7 @@ bool ui_init(void)
     /* Use system font */
     s_font = NULL; /* NULL = default system font */
 
+    srand((unsigned int)svcGetSystemTick());
     return true;
 }
 
@@ -291,7 +293,8 @@ void ui_cleanup(void)
 void ui_update(ui_state_t *state, const jfin_session_t *session,
                u32 kdown, u32 kheld, touchPosition touch)
 {
-    (void)kheld;
+    /* Advance download queue every frame regardless of active view */
+    dl_process_queue();
 
     switch (state->current_view) {
     case VIEW_LOGIN:
@@ -337,7 +340,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 }
             }
         }
-        /* START to attempt login */
+        /* R: attempt login */
         if (kdown & KEY_R) {
             /* Show connecting indicator before blocking login call */
             C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
@@ -361,6 +364,13 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 state->selected_index = 0;
                 state->scroll_offset = 0;
             }
+        }
+        /* SELECT: open settings without logging in (offline/downloads access) */
+        if (kdown & KEY_SELECT) {
+            state->previous_view = VIEW_LOGIN;
+            state->settings_index = 0;
+            state->settings_scroll = 0;
+            state->current_view = VIEW_SETTINGS;
         }
         break;
 
@@ -597,7 +607,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 }
             }
         }
-        /* X: download video with subtitles burned in (video items only) */
+        /* X: download video/book. ZL+X: download video with first available subtitle. */
         if (kdown & KEY_X) {
             if (state->selected_index < state->items.count) {
                 jfin_item_t *item = &state->items.items[state->selected_index];
@@ -606,16 +616,41 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 bool is_book  = (item->type == JFIN_ITEM_BOOK);
                 if (is_video) {
                     jfin_stream_t stream;
-                    /* Use active subtitle track name if available */
-                    const char *sub_name = "";
-                    if (state->subtitle_stream_index >= 0 && state->subtitle_list_loaded) {
-                        for (int si = 0; si < state->subtitle_list.count; si++) {
-                            if (state->subtitle_list.subs[si].index == state->subtitle_stream_index) {
-                                sub_name = state->subtitle_list.subs[si].language;
-                                break;
+                    bool want_first_sub = (kheld & KEY_ZL) != 0;
+                    int dl_sub_idx;
+                    char dl_sub_lang[8] = "";
+
+                    if (want_first_sub) {
+                        /* ZL+X: fetch first available subtitle and burn it in */
+                        if (state->subtitle_list_loaded && state->subtitle_list.count > 0) {
+                            dl_sub_idx = state->subtitle_list.subs[0].index;
+                            snprintf(dl_sub_lang, sizeof(dl_sub_lang), "%s",
+                                     state->subtitle_list.subs[0].language);
+                        } else {
+                            jfin_subtitle_list_t tmp_subs;
+                            if (jfin_get_subtitle_streams(session, item->id, &tmp_subs)
+                                && tmp_subs.count > 0) {
+                                dl_sub_idx = tmp_subs.subs[0].index;
+                                snprintf(dl_sub_lang, sizeof(dl_sub_lang), "%s",
+                                         tmp_subs.subs[0].language);
+                            } else {
+                                dl_sub_idx = -1;
+                            }
+                        }
+                    } else {
+                        /* Plain X: use currently active subtitle (may be -1 = none) */
+                        dl_sub_idx = state->subtitle_stream_index;
+                        if (state->subtitle_stream_index >= 0 && state->subtitle_list_loaded) {
+                            for (int si = 0; si < state->subtitle_list.count; si++) {
+                                if (state->subtitle_list.subs[si].index == state->subtitle_stream_index) {
+                                    snprintf(dl_sub_lang, sizeof(dl_sub_lang), "%s",
+                                             state->subtitle_list.subs[si].language);
+                                    break;
+                                }
                             }
                         }
                     }
+
                     /* Build breadcrumb display name: "Series / Season / E## - Title" */
                     char dl_name[256];
                     if (item->type == JFIN_ITEM_EPISODE) {
@@ -638,10 +673,8 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     } else {
                         snprintf(dl_name, sizeof(dl_name), "%s", item->name);
                     }
-                    if (jfin_get_video_stream(session, item->id, 0, false,
-                                             state->subtitle_stream_index, &stream)) {
-                        dl_queue_video(item->id, dl_name, stream.url, sub_name);
-                    }
+                    if (jfin_get_video_stream(session, item->id, 0, false, dl_sub_idx, &stream))
+                        dl_queue_video(item->id, dl_name, stream.url, dl_sub_lang);
                 } else if (is_book) {
                     /* Build breadcrumb display name for the book */
                     char book_name[256];
@@ -669,6 +702,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
         /* SELECT: settings in libraries, search in browse */
         if (kdown & KEY_SELECT) {
             if (state->current_view == VIEW_LIBRARIES) {
+                state->previous_view = VIEW_LIBRARIES;
                 state->settings_index = 0;
                 state->settings_scroll = 0;
                 state->current_view = VIEW_SETTINGS;
@@ -1037,12 +1071,14 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 if (total <= 0 || state->reader_page < total - 1) {
                     state->reader_page++;
                     state->reader_load_page = true;
+                    if (state->reader_split) state->reader_pan_y = 0.0f;
                 }
             }
             if (kdown & (KEY_L | KEY_DLEFT)) {
                 if (state->reader_page > 0) {
                     state->reader_page--;
                     state->reader_load_page = true;
+                    if (state->reader_split) state->reader_pan_y = 0.0f;
                 }
             }
         }
@@ -1162,7 +1198,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 state->downloads_index  = 0;
                 state->downloads_loaded = false;
                 state->current_view = VIEW_DOWNLOADS;
-            } else if (state->settings_index == SET_LOGOUT) {
+            } else if (state->settings_index == SET_LOGOUT && session->access_token[0] != '\0') {
                 jfin_session_t *s = (jfin_session_t *)session;
                 jfin_logout(s);
                 g_config.access_token[0] = '\0';
@@ -1174,36 +1210,82 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             }
         }
 
-        /* B: save and return to libraries */
+        /* B: save and return to where we came from */
         if (kdown & KEY_B) {
             config_save(&g_config);
-            state->current_view = VIEW_LIBRARIES;
-            jfin_get_views(session, &state->items);
-            state->selected_index = 0;
-            state->scroll_offset = 0;
+            if (state->previous_view == VIEW_LOGIN || state->previous_view == VIEW_DOWNLOADS) {
+                /* Came from login (offline) or downloads — no network call */
+                state->current_view = state->previous_view;
+            } else {
+                state->current_view = VIEW_LIBRARIES;
+                jfin_get_views(session, &state->items);
+                state->selected_index = 0;
+                state->scroll_offset = 0;
+            }
         }
         break;
 
     case VIEW_DOWNLOADS:
-        /* Process download queue — start next if current finished */
-        dl_process_queue();
         if (!state->downloads_loaded) {
             dl_manager_scan();
             state->downloads_loaded = true;
             if (state->downloads_index >= dl_manager_count())
                 state->downloads_index = 0;
         }
-        if (kdown & KEY_DUP && state->downloads_index > 0) {
-            state->downloads_index--;
-            if (state->downloads_index < state->downloads_scroll)
-                state->downloads_scroll = state->downloads_index;
+
+        /* ── Circle pad: queue navigation (top screen) ─────────────── */
+        {
+            int qcnt = dl_queue_count();
+            if (kdown & KEY_CPAD_UP) {
+                state->downloads_queue_focus = true;
+                if (state->downloads_queue_index > 0)
+                    state->downloads_queue_index--;
+            }
+            if (kdown & KEY_CPAD_DOWN) {
+                state->downloads_queue_focus = true;
+                if (state->downloads_queue_index < qcnt - 1)
+                    state->downloads_queue_index++;
+            }
+            /* Clamp if queue shrank */
+            if (state->downloads_queue_index >= qcnt)
+                state->downloads_queue_index = qcnt > 0 ? qcnt - 1 : 0;
         }
-        if (kdown & KEY_DDOWN && state->downloads_index < dl_manager_count() - 1) {
-            state->downloads_index++;
-            if (state->downloads_index >= state->downloads_scroll + UI_MAX_VISIBLE_ITEMS)
-                state->downloads_scroll = state->downloads_index - UI_MAX_VISIBLE_ITEMS + 1;
+
+        /* ── D-pad: downloaded file list (bottom screen) ────────────── */
+        if (kdown & KEY_DUP) {
+            state->downloads_queue_focus = false;
+            if (state->downloads_index > 0) {
+                state->downloads_index--;
+                state->downloads_name_offset = 0;
+                if (state->downloads_index < state->downloads_scroll)
+                    state->downloads_scroll = state->downloads_index;
+            }
         }
-        /* A: open the selected file */
+        if (kdown & KEY_DDOWN) {
+            state->downloads_queue_focus = false;
+            if (state->downloads_index < dl_manager_count() - 1) {
+                state->downloads_index++;
+                state->downloads_name_offset = 0;
+                if (state->downloads_index >= state->downloads_scroll + UI_MAX_VISIBLE_ITEMS)
+                    state->downloads_scroll = state->downloads_index - UI_MAX_VISIBLE_ITEMS + 1;
+            }
+        }
+        if (kdown & KEY_DLEFT) {
+            state->downloads_queue_focus = false;
+            if (state->downloads_name_offset > 0)
+                state->downloads_name_offset--;
+        }
+        if (kdown & KEY_DRIGHT) {
+            state->downloads_queue_focus = false;
+            int sel = state->downloads_index;
+            if (sel < dl_manager_count()) {
+                int nlen = (int)strlen(s_dl_entries[sel].name);
+                if (state->downloads_name_offset + 1 < nlen)
+                    state->downloads_name_offset++;
+            }
+        }
+
+        /* ── A: open file ───────────────────────────────────────────── */
         if (kdown & KEY_A && state->downloads_index < dl_manager_count()) {
             const dl_entry_t *e = dl_manager_get(state->downloads_index);
             if (e) {
@@ -1229,20 +1311,33 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                         state->now_playing_offline = true;
                         snprintf(state->now_playing_local_path,
                                  sizeof(state->now_playing_local_path), "%s", e->path);
-                        state->previous_view   = state->current_view;
-                        state->current_view    = VIEW_NOW_PLAYING;
+                        state->previous_view = state->current_view;
+                        state->current_view  = VIEW_NOW_PLAYING;
                     }
                 }
             }
         }
-        /* X: delete selected file */
-        if (kdown & KEY_X && state->downloads_index < dl_manager_count()) {
-            dl_manager_delete(state->downloads_index);
-            dl_manager_scan();
-            int cnt = dl_manager_count();
-            if (state->downloads_index >= cnt && cnt > 0)
-                state->downloads_index = cnt - 1;
+
+        /* ── X: remove queue item (circle pad focus) or delete file ─── */
+        if (kdown & KEY_X) {
+            if (state->downloads_queue_focus) {
+                int qcnt = dl_queue_count();
+                if (state->downloads_queue_index < qcnt) {
+                    dl_queue_remove(state->downloads_queue_index);
+                    qcnt = dl_queue_count();
+                    if (state->downloads_queue_index >= qcnt && qcnt > 0)
+                        state->downloads_queue_index = qcnt - 1;
+                }
+            } else if (state->downloads_index < dl_manager_count()) {
+                dl_manager_delete(state->downloads_index);
+                dl_manager_scan();
+                state->downloads_name_offset = 0;
+                int cnt = dl_manager_count();
+                if (state->downloads_index >= cnt && cnt > 0)
+                    state->downloads_index = cnt - 1;
+            }
         }
+
         /* Y: cancel active download */
         if (kdown & KEY_Y)
             dl_cancel();
@@ -1344,7 +1439,7 @@ void ui_render_login(const ui_state_t *state)
     }
 
     draw_text(10, 210, 0.45f, rgba(COLOR_TEXT_SECONDARY),
-              "A: Edit field  R: Connect  START: Exit");
+              "A: Edit field  R: Connect  SEL: Settings");
 }
 
 void ui_render_libraries(const ui_state_t *state)
@@ -1453,11 +1548,26 @@ void ui_render_browse(const ui_state_t *state)
         draw_text(220, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY), info);
     }
 
-    if (state->items.total_count > JFIN_MAX_ITEMS)
-        draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY), "A:Sel B:Back L/R:Pg SEL:Search");
-    else
-        draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
-                  "A:Play X:Download B:Back SEL:Search");
+    {
+        bool sel_dl = false;
+        if (state->selected_index < state->items.count) {
+            jfin_item_type_t t = state->items.items[state->selected_index].type;
+            sel_dl = (t == JFIN_ITEM_MOVIE || t == JFIN_ITEM_EPISODE || t == JFIN_ITEM_BOOK);
+        }
+        bool paginating = (state->items.total_count > JFIN_MAX_ITEMS);
+        if (paginating && sel_dl)
+            draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
+                      "A:Sel  X:DL  L/R:Pg  B:Back");
+        else if (paginating)
+            draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
+                      "A:Sel  B:Back  L/R:Pg  SEL:Search");
+        else if (sel_dl)
+            draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
+                      "A:Play  X:DL  ZL+X:DL+Sub  B:Back");
+        else
+            draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
+                      "A:Select  B:Back  SEL:Search");
+    }
 }
 
 void ui_render_now_playing(const ui_state_t *state, const player_status_t *player)
@@ -1723,7 +1833,12 @@ void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
             break;
         case SET_LOGOUT:
             label = "Logout";
-            value_color = rgba(COLOR_DANGER);
+            if (session->access_token[0] != '\0') {
+                value_color = rgba(COLOR_DANGER);
+            } else {
+                snprintf(value, sizeof(value), "(not logged in)");
+                value_color = rgba(COLOR_TEXT_SECONDARY);
+            }
             break;
         case SET_VERSION:
             label = "Version";
@@ -1740,7 +1855,8 @@ void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
         }
 
         draw_text(15, y + 10, 0.5f,
-                  idx == SET_LOGOUT ? rgba(COLOR_DANGER) : rgba(COLOR_TEXT_PRIMARY),
+                  (idx == SET_LOGOUT && session->access_token[0] != '\0')
+                      ? rgba(COLOR_DANGER) : rgba(COLOR_TEXT_PRIMARY),
                   label);
         if (value[0])
             draw_text(200, y + 10, 0.45f, value_color, value);
@@ -1895,17 +2011,24 @@ void ui_render_downloads(const ui_state_t *state)
         draw_text(10, 42, 0.38f, rgba(COLOR_TEXT_SECONDARY), "Browse items and press X to queue");
     }
 
-    /* Queue list */
+    /* Queue list with optional navigation cursor */
     int qy = 90;
     if (qcnt > 0) {
-        char qhdr[32];
-        snprintf(qhdr, sizeof(qhdr), "Queue: %d item%s", qcnt, qcnt == 1 ? "" : "s");
-        draw_text(10, qy, 0.44f, rgba(COLOR_TEXT_PRIMARY), qhdr);
+        char qhdr[48];
+        snprintf(qhdr, sizeof(qhdr), "Queue: %d item%s%s",
+                 qcnt, qcnt == 1 ? "" : "s",
+                 state->downloads_queue_focus ? "  [Circle]" : "");
+        draw_text(10, qy, 0.44f,
+                  state->downloads_queue_focus ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_PRIMARY),
+                  qhdr);
         qy += 18;
         for (int qi = 0; qi < qcnt && qi < 6; qi++) {
+            bool qsel = state->downloads_queue_focus && (qi == state->downloads_queue_index);
             char ql[72];
-            snprintf(ql, sizeof(ql), "  %d. %.52s", qi + 1, dl_queue_item_name(qi));
-            draw_text(10, qy, 0.38f, rgba(COLOR_TEXT_SECONDARY), ql);
+            snprintf(ql, sizeof(ql), "%s%d. %.50s",
+                     qsel ? "> " : "  ", qi + 1, dl_queue_item_name(qi));
+            draw_text(10, qy, 0.38f,
+                      qsel ? rgba(COLOR_TEXT_PRIMARY) : rgba(COLOR_TEXT_SECONDARY), ql);
             qy += 15;
         }
         if (qcnt > 6)
@@ -1913,6 +2036,14 @@ void ui_render_downloads(const ui_state_t *state)
     } else if (vds != DL_ACTIVE) {
         draw_text(10, qy, 0.40f, rgba(COLOR_TEXT_SECONDARY), "Queue empty");
     }
+
+    /* Hint at bottom of top screen */
+    if (state->downloads_queue_focus && dl_queue_count() > 0)
+        draw_text(10, 225, 0.36f, rgba(COLOR_TEXT_SECONDARY),
+                  "Circle:Nav  X:Remove  Dpad:Files");
+    else if (vds == DL_ACTIVE)
+        draw_text(10, 225, 0.36f, rgba(COLOR_TEXT_SECONDARY),
+                  "Y:Cancel DL  Circle:Queue");
 
     C2D_TargetClear(s_bottom, bg_color());
     C2D_SceneBegin(s_bottom);
@@ -1946,11 +2077,18 @@ void ui_render_downloads(const ui_state_t *state)
 
         draw_list_item_bg(y, 306, UI_LIST_ITEM_HEIGHT - 4, sel);
 
-        /* Truncate name to fit */
+        /* For selected item: scroll name if offset > 0 or name is long */
         char disp[40];
-        snprintf(disp, sizeof(disp), "%.36s%s",
-                 s_dl_entries[idx].name,
-                 strlen(s_dl_entries[idx].name) > 36 ? "..." : "");
+        const char *full_name = s_dl_entries[idx].name;
+        int nlen = (int)strlen(full_name);
+        if (sel && state->downloads_name_offset > 0 && state->downloads_name_offset < nlen) {
+            const char *shifted = full_name + state->downloads_name_offset;
+            int remain = nlen - state->downloads_name_offset;
+            snprintf(disp, sizeof(disp), "%.*s%s", remain > 36 ? 36 : remain, shifted,
+                     remain > 36 ? ">" : "");
+        } else {
+            snprintf(disp, sizeof(disp), "%.36s%s", full_name, nlen > 36 ? ">" : "");
+        }
 
         draw_text(14, y + 4, 0.45f, rgba(COLOR_TEXT_PRIMARY), disp);
 
@@ -1968,9 +2106,9 @@ void ui_render_downloads(const ui_state_t *state)
     }
 
     draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
-              dl_get_state() == DL_ACTIVE
-                  ? "A:Open  X:Del  Y:Cancel DL  B:Back"
-                  : "A:Open  X:Delete  B:Back");
+              state->downloads_queue_focus
+                  ? "A:Open  X:RemoveQueue  L/R:Scroll  B:Back"
+                  : "A:Open  X:Delete  L/R:Scroll  B:Back");
 }
 
 /* ── Main render dispatch ──────────────────────────────────────────── */
