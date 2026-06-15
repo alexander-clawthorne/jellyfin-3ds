@@ -140,6 +140,12 @@ static void dl_manager_delete(int idx)
 
 static int dl_manager_count(void) { return s_dl_count; }
 
+static const dl_entry_t *dl_manager_get(int idx)
+{
+    if (idx < 0 || idx >= s_dl_count) return NULL;
+    return &s_dl_entries[idx];
+}
+
 static void draw_text(float x, float y, float size, u32 color, const char *text)
 {
     C2D_Text c2d_text;
@@ -325,7 +331,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             /* Show connecting indicator before blocking login call */
             C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
             C2D_TextBufClear(s_text_buf);
-            C2D_TargetClear(s_bottom, rgba(COLOR_BG_DARK));
+            C2D_TargetClear(s_bottom, bg_color());
             C2D_SceneBegin(s_bottom);
             draw_text(100, 110, 0.6f, rgba(COLOR_PRIMARY), "Connecting...");
             C3D_FrameEnd(0);
@@ -520,6 +526,10 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     state->reader_page      = 0;
                     state->reader_load_page = false;
                     state->reader_rotated   = false;
+                    state->reader_split     = false;
+                    state->reader_zoom      = 1.0f;
+                    state->reader_pan_x     = 0.0f;
+                    state->reader_pan_y     = 0.0f;
                     state->previous_view    = state->current_view;
                     state->current_view     = VIEW_READER;
                     reader_open_book(session, item->id);
@@ -567,11 +577,21 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 jfin_item_t *item = &state->items.items[state->selected_index];
                 bool is_video = (item->type == JFIN_ITEM_MOVIE ||
                                  item->type == JFIN_ITEM_EPISODE);
-                if (is_video && dl_get_state() == DL_IDLE) {
+                if (is_video) {
                     jfin_stream_t stream;
+                    /* Use active subtitle track name if available */
+                    const char *sub_name = "";
+                    if (state->subtitle_stream_index >= 0 && state->subtitle_list_loaded) {
+                        for (int si = 0; si < state->subtitle_list.count; si++) {
+                            if (state->subtitle_list.subs[si].index == state->subtitle_stream_index) {
+                                sub_name = state->subtitle_list.subs[si].language;
+                                break;
+                            }
+                        }
+                    }
                     if (jfin_get_video_stream(session, item->id, 0, false,
                                              state->subtitle_stream_index, &stream)) {
-                        dl_start_video(item->id, item->name, stream.url);
+                        dl_queue_video(item->id, item->name, stream.url, sub_name);
                     }
                 }
             }
@@ -910,16 +930,70 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             }
         }
 
+        /* START: toggle dual-screen split mode */
+        if (kdown & KEY_START) {
+            state->reader_split = !state->reader_split;
+            if (state->reader_split && reader_page_ready()) {
+                /* Auto-zoom so the full page height fits across both 240px screens */
+                int pw = reader_page_width(), ph = reader_page_height();
+                if (pw > 0 && ph > 0) {
+                    float base_sc = 400.0f / (float)pw;
+                    float full_h  = (float)ph * base_sc;
+                    state->reader_zoom = (full_h > 0.0f) ? (480.0f / full_h) : 1.0f;
+                    if (state->reader_zoom < 0.05f) state->reader_zoom = 0.05f;
+                    if (state->reader_zoom > 3.0f)  state->reader_zoom = 3.0f;
+                }
+                state->reader_pan_x = 0.0f;
+                state->reader_pan_y = 0.0f;
+            } else if (!state->reader_split) {
+                state->reader_zoom  = 1.0f;
+                state->reader_pan_x = 0.0f;
+                state->reader_pan_y = 0.0f;
+            }
+        }
+
+        /* Circle pad: horizontal pan always; vertical = zoom in normal, pan in split */
+        if (rs == READER_READY && reader_page_ready()) {
+            circlePosition circle;
+            hidCircleRead(&circle);
+            const float dead = 0.15f;
+            float cx = (float)circle.dx / 155.0f;
+            float cy = (float)circle.dy / 155.0f;
+            if (cx >  dead) state->reader_pan_x += 3.0f;
+            else if (cx < -dead) state->reader_pan_x -= 3.0f;
+            if (state->reader_split) {
+                /* Up/down scrolls through the page vertically */
+                if (cy >  dead) state->reader_pan_y -= 3.0f;
+                else if (cy < -dead) state->reader_pan_y += 3.0f;
+            } else {
+                /* Up = zoom in, down = zoom out */
+                if (cy > dead) {
+                    state->reader_zoom *= 1.02f;
+                    if (state->reader_zoom > 5.0f) state->reader_zoom = 5.0f;
+                } else if (cy < -dead) {
+                    state->reader_zoom *= 0.98f;
+                    if (state->reader_zoom < 0.2f) state->reader_zoom = 0.2f;
+                }
+            }
+        }
+
         /* SELECT: toggle portrait/landscape — re-extract page with new rotation */
         if (kdown & KEY_SELECT) {
             state->reader_rotated   = !state->reader_rotated;
             state->reader_load_page = true;
         }
 
-        /* B: back (cancel download if in progress) */
+        /* B: back (cancel download if in progress, exit split mode first if active) */
         if (kdown & KEY_B) {
-            reader_cancel();
-            state->current_view = state->previous_view;
+            if (state->reader_split) {
+                state->reader_split = false;
+                state->reader_zoom  = 1.0f;
+                state->reader_pan_x = 0.0f;
+                state->reader_pan_y = 0.0f;
+            } else {
+                reader_cancel();
+                state->current_view = state->previous_view;
+            }
         }
         break;
     }
@@ -993,6 +1067,8 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
         break;
 
     case VIEW_DOWNLOADS:
+        /* Process download queue — start next if current finished */
+        dl_process_queue();
         if (!state->downloads_loaded) {
             dl_manager_scan();
             state->downloads_loaded = true;
@@ -1003,6 +1079,36 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             state->downloads_index--;
         if (kdown & KEY_DDOWN && state->downloads_index < dl_manager_count() - 1)
             state->downloads_index++;
+        /* A: open the selected file */
+        if (kdown & KEY_A && state->downloads_index < dl_manager_count()) {
+            const dl_entry_t *e = dl_manager_get(state->downloads_index);
+            if (e) {
+                if (!e->is_video) {
+                    strncpy(state->now_playing.name, e->name, sizeof(state->now_playing.name)-1);
+                    state->now_playing.name[sizeof(state->now_playing.name)-1] = '\0';
+                    state->reader_page    = 0;
+                    state->reader_load_page = false;
+                    state->reader_rotated = false;
+                    state->reader_split   = false;
+                    state->reader_zoom    = 1.0f;
+                    state->reader_pan_x   = 0.0f;
+                    state->reader_pan_y   = 0.0f;
+                    state->previous_view  = state->current_view;
+                    state->current_view   = VIEW_READER;
+                    reader_open_local(e->path);
+                } else {
+                    audio_player_stop();
+                    if (video_player_play(e->path, 0, 0, VP_3D_NONE)) {
+                        strncpy(state->now_playing.name, e->name, sizeof(state->now_playing.name)-1);
+                        state->now_playing.name[sizeof(state->now_playing.name)-1] = '\0';
+                        state->has_now_playing = true;
+                        state->previous_view   = state->current_view;
+                        state->current_view    = VIEW_NOW_PLAYING;
+                    }
+                }
+            }
+        }
+        /* X: delete selected file */
         if (kdown & KEY_X && state->downloads_index < dl_manager_count()) {
             dl_manager_delete(state->downloads_index);
             dl_manager_scan();
@@ -1010,6 +1116,9 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             if (state->downloads_index >= cnt && cnt > 0)
                 state->downloads_index = cnt - 1;
         }
+        /* Y: cancel active download */
+        if (kdown & KEY_Y)
+            dl_cancel();
         if (kdown & KEY_B)
             state->current_view = VIEW_SETTINGS;
         break;
@@ -1042,7 +1151,7 @@ void ui_navigate_into(ui_state_t *state, const jfin_session_t *session,
     /* Show loading indicator before blocking API call */
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
     C2D_TextBufClear(s_text_buf);
-    C2D_TargetClear(s_bottom, rgba(COLOR_BG_DARK));
+    C2D_TargetClear(s_bottom, bg_color());
     C2D_SceneBegin(s_bottom);
     draw_text(115, 110, 0.6f, rgba(COLOR_PRIMARY), "Loading...");
     C3D_FrameEnd(0);
@@ -1090,7 +1199,7 @@ void ui_navigate_back(ui_state_t *state, const jfin_session_t *session)
 void ui_render_login(const ui_state_t *state)
 {
     /* Bottom screen: login form */
-    C2D_TargetClear(s_bottom, rgba(COLOR_BG_DARK));
+    C2D_TargetClear(s_bottom, bg_color());
     C2D_SceneBegin(s_bottom);
 
     draw_text(10, 10, 0.7f, rgba(COLOR_PRIMARY), "Connect to Jellyfin Server");
@@ -1114,7 +1223,7 @@ void ui_render_login(const ui_state_t *state)
 void ui_render_libraries(const ui_state_t *state)
 {
     /* Bottom screen: library list */
-    C2D_TargetClear(s_bottom, rgba(COLOR_BG_DARK));
+    C2D_TargetClear(s_bottom, bg_color());
     C2D_SceneBegin(s_bottom);
 
     draw_text(10, 5, 0.55f, rgba(COLOR_PRIMARY), "Libraries");
@@ -1134,10 +1243,21 @@ void ui_render_libraries(const ui_state_t *state)
               "A:Enter B:Back Y:Playing SEL:Settings");
 }
 
+static bool item_has_download(const char *item_id, bool is_video)
+{
+    char path[192];
+    struct stat st;
+    if (is_video)
+        snprintf(path, sizeof(path), VDL_DIR "/video_%s.ts", item_id);
+    else
+        snprintf(path, sizeof(path), VDL_DIR "/cbz_%s.cbz", item_id);
+    return stat(path, &st) == 0;
+}
+
 void ui_render_browse(const ui_state_t *state)
 {
     /* Bottom screen: item list */
-    C2D_TargetClear(s_bottom, rgba(COLOR_BG_DARK));
+    C2D_TargetClear(s_bottom, bg_color());
     C2D_SceneBegin(s_bottom);
 
     /* Breadcrumb */
@@ -1155,17 +1275,20 @@ void ui_render_browse(const ui_state_t *state)
 
         draw_list_item_bg(y, 310, UI_LIST_ITEM_HEIGHT - 4, idx == state->selected_index);
 
-        /* Item name (3D badge for stereoscopic content) */
-        const char *badge = (item->video_3d_format != JFIN_3D_NONE) ? " [3D]" : "";
+        /* Item name */
+        bool is_vid_item = (item->type == JFIN_ITEM_MOVIE || item->type == JFIN_ITEM_EPISODE);
+        bool is_book_item = (item->type == JFIN_ITEM_BOOK);
+        bool has_dl = ((is_vid_item || is_book_item) &&
+                       item_has_download(item->id, is_vid_item));
+        const char *dl_badge = has_dl ? " [D]" : "";
         char label[160];
         if (item->type == JFIN_ITEM_AUDIO && item->index_number > 0) {
-            snprintf(label, sizeof(label), "%d. %s%s", item->index_number, item->name, badge);
+            snprintf(label, sizeof(label), "%d. %s%s", item->index_number, item->name, dl_badge);
         } else if (item->type == JFIN_ITEM_EPISODE && item->index_number > 0) {
-            snprintf(label, sizeof(label), "E%d - %s%s", item->index_number, item->name, badge);
+            snprintf(label, sizeof(label), "E%d - %s%s", item->index_number, item->name, dl_badge);
         } else {
-            snprintf(label, sizeof(label), "%s%s", item->name, badge);
+            snprintf(label, sizeof(label), "%s%s", item->name, dl_badge);
         }
-
         draw_text(15, y + 4, 0.5f, rgba(COLOR_TEXT_PRIMARY), label);
 
         /* Subtitle: artist/year/duration */
@@ -1386,7 +1509,7 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
 
 void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
 {
-    C2D_TargetClear(s_bottom, rgba(COLOR_BG_DARK));
+    C2D_TargetClear(s_bottom, bg_color());
     C2D_SceneBegin(s_bottom);
 
     draw_text(10, 5, 0.55f, rgba(COLOR_PRIMARY), "Settings");
@@ -1490,7 +1613,13 @@ void ui_render_reader(const ui_state_t *state)
     C2D_SceneBegin(s_top);
 
     if (reader_page_ready()) {
-        reader_draw(0, 0, TOP_SCREEN_WIDTH, TOP_SCREEN_HEIGHT);
+        if (state->reader_split) {
+            reader_draw_split_top(state->reader_zoom,
+                                  state->reader_pan_x, state->reader_pan_y);
+        } else {
+            reader_draw(0, 0, TOP_SCREEN_WIDTH, TOP_SCREEN_HEIGHT,
+                        state->reader_zoom, state->reader_pan_x, state->reader_pan_y);
+        }
     } else if (rs == READER_DOWNLOADING) {
         size_t total = reader_dl_total();
         size_t bytes = reader_dl_bytes();
@@ -1527,30 +1656,52 @@ void ui_render_reader(const ui_state_t *state)
         draw_text(135, 105, 0.55f, rgba(COLOR_TEXT_SECONDARY), "Loading page...");
     }
 
-    /* Bottom screen: title + page counter + controls */
-    C2D_TargetClear(s_bottom, rgba(COLOR_BG_DARK));
-    C2D_SceneBegin(s_bottom);
+    if (state->reader_split && reader_page_ready()) {
+        /* Split mode: bottom screen shows the lower half of the page */
+        C2D_TargetClear(s_bottom, rgba(0x000000FF));
+        C2D_SceneBegin(s_bottom);
+        reader_draw_split_bottom(state->reader_zoom,
+                                 state->reader_pan_x, state->reader_pan_y);
+        /* Translucent hint strip at bottom edge */
+        draw_rect(0, 228, 320, 12, rgba(0x00000099));
+        draw_text(4, 229, 0.33f, rgba(COLOR_TEXT_SECONDARY),
+                  "START:exit  Circle:pan  L/R:page  B:normal");
+    } else {
+        /* Normal mode: bottom screen shows controls */
+        C2D_TargetClear(s_bottom, bg_color());
+        C2D_SceneBegin(s_bottom);
 
-    draw_text(10, 5, 0.45f, rgba(COLOR_TEXT_SECONDARY), state->now_playing.name);
+        draw_text(10, 5, 0.45f, rgba(COLOR_TEXT_SECONDARY), state->now_playing.name);
 
-    if (reader_page_ready()) {
-        char pg_str[32];
-        int total = reader_page_count();
-        if (total > 0)
-            snprintf(pg_str, sizeof(pg_str), "Page %d / %d",
-                     state->reader_page + 1, total);
-        else
-            snprintf(pg_str, sizeof(pg_str), "Page %d", state->reader_page + 1);
-        draw_text(90, 95, 0.6f, rgba(COLOR_PRIMARY), pg_str);
+        if (reader_page_ready()) {
+            char pg_str[32];
+            int total = reader_page_count();
+            if (total > 0)
+                snprintf(pg_str, sizeof(pg_str), "Page %d / %d",
+                         state->reader_page + 1, total);
+            else
+                snprintf(pg_str, sizeof(pg_str), "Page %d", state->reader_page + 1);
+            draw_text(90, 95, 0.6f, rgba(COLOR_PRIMARY), pg_str);
 
-        /* Orientation indicator */
-        draw_text(90, 130, 0.42f,
-                  state->reader_rotated ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_SECONDARY),
-                  state->reader_rotated ? "Landscape (SELECT: normal)"
-                                        : "Portrait  (SELECT: landscape)");
+            /* Zoom level indicator when not at 1.0 */
+            if (state->reader_zoom < 0.99f || state->reader_zoom > 1.01f) {
+                char zoom_str[16];
+                snprintf(zoom_str, sizeof(zoom_str), "Zoom: %.0f%%",
+                         state->reader_zoom * 100.0f);
+                draw_text(105, 125, 0.42f, rgba(COLOR_VALUE), zoom_str);
+            }
 
-        draw_text(20, 200, 0.42f, rgba(COLOR_TEXT_PRIMARY),
-                  "L/R:Page  SELECT:Rotate  B:Back");
+            /* Orientation indicator */
+            draw_text(85, 145, 0.42f,
+                      state->reader_rotated ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_SECONDARY),
+                      state->reader_rotated ? "Landscape (SELECT: normal)"
+                                            : "Portrait  (SELECT: landscape)");
+
+            draw_text(5, 196, 0.38f, rgba(COLOR_TEXT_PRIMARY),
+                      "L/R:Page  SEL:Rotate  START:Split  B:Back");
+            draw_text(5, 213, 0.38f, rgba(COLOR_TEXT_SECONDARY),
+                      state->reader_split ? "Circle:Pan" : "Circle(U/D):Zoom  Circle(L/R):Pan");
+        }
     }
 }
 
@@ -1558,7 +1709,7 @@ void ui_render_reader(const ui_state_t *state)
 
 void ui_render_downloads(const ui_state_t *state)
 {
-    C2D_TargetClear(s_top, rgba(COLOR_BG_DARK));
+    C2D_TargetClear(s_top, bg_color());
     C2D_SceneBegin(s_top);
     draw_text(60, 80, 0.6f, rgba(COLOR_PRIMARY), "Manage Downloads");
     draw_text(50, 120, 0.45f, rgba(COLOR_TEXT_SECONDARY), "X:Delete  B:Back");
@@ -1583,7 +1734,7 @@ void ui_render_downloads(const ui_state_t *state)
         draw_text(80, 160, 0.42f, rgba(COLOR_DANGER), "Last download failed");
     }
 
-    C2D_TargetClear(s_bottom, rgba(COLOR_BG_DARK));
+    C2D_TargetClear(s_bottom, bg_color());
     C2D_SceneBegin(s_bottom);
 
     draw_text(10, 5, 0.55f, rgba(COLOR_PRIMARY), "Downloads");
@@ -1591,7 +1742,7 @@ void ui_render_downloads(const ui_state_t *state)
     int cnt = dl_manager_count();
     if (cnt == 0) {
         draw_text(40, 100, 0.48f, rgba(COLOR_TEXT_SECONDARY), "No downloaded files");
-        draw_text(20, 130, 0.42f, rgba(COLOR_TEXT_SECONDARY), "Browse videos, press X to download");
+        draw_text(20, 130, 0.42f, rgba(COLOR_TEXT_SECONDARY), "Browse: A=play, X=queue download");
         draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY), "B:Back");
         return;
     }
@@ -1624,7 +1775,10 @@ void ui_render_downloads(const ui_state_t *state)
         draw_text(220, y + 4, 0.4f, rgba(COLOR_TEXT_SECONDARY), meta);
     }
 
-    draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY), "D-pad:Select  X:Delete  B:Back");
+    draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
+              dl_get_state() == DL_ACTIVE
+                  ? "A:Open  X:Del  Y:Cancel DL  B:Back"
+                  : "A:Open  X:Delete  B:Back");
 }
 
 /* ── Main render dispatch ──────────────────────────────────────────── */
@@ -1653,13 +1807,13 @@ void ui_render(const ui_state_t *state, const jfin_session_t *session,
     } else if (state->current_view == VIEW_DOWNLOADS) {
         ui_render_downloads(state);
     } else {
-        C2D_TargetClear(s_top, rgba(COLOR_BG_DARK));
+        C2D_TargetClear(s_top, bg_color());
         C2D_SceneBegin(s_top);
 
         draw_text(100, 80, 1.0f, rgba(COLOR_PRIMARY), "Jellyfin 3DS");
         draw_text(168, 118, 0.48f, rgba(COLOR_TEXT_SECONDARY), "v" JFIN_VERSION);
-        draw_text(75, 145, 0.4f, rgba(COLOR_ACCENT),
-                  "Subtitles (Y)  •  Manga Reader  •  3D");
+        draw_text(50, 145, 0.4f, rgba(COLOR_ACCENT),
+                  "CBZ/Manga  •  Subtitles  •  Downloads");
 
         /* Show mini now-playing bar if something is playing */
         if (state->has_now_playing && player->state == PLAYER_PLAYING) {
@@ -1670,17 +1824,20 @@ void ui_render(const ui_state_t *state, const jfin_session_t *session,
         }
 
         /* Video download progress toast */
-        if (dl_get_state() == DL_ACTIVE) {
+        dl_state_t cur_dl = dl_get_state();
+        if (cur_dl == DL_ACTIVE) {
             size_t tot = dl_total(), now = dl_bytes();
-            char dl_buf[48];
+            char dl_line1[64], dl_line2[48];
+            snprintf(dl_line1, sizeof(dl_line1), "DL: %.28s", dl_item_name());
             if (tot > 0)
-                snprintf(dl_buf, sizeof(dl_buf), "DL %.1f/%.1fMB",
-                         now / (1024.0f * 1024.0f), tot / (1024.0f * 1024.0f));
+                snprintf(dl_line2, sizeof(dl_line2), "%.1f / %.1fMB  (queue: %d)",
+                         now / (1024.0f*1024.0f), tot / (1024.0f*1024.0f), dl_queue_count());
             else
-                snprintf(dl_buf, sizeof(dl_buf), "DL %.1fMB",
-                         now / (1024.0f * 1024.0f));
-            draw_rect(0, 0, 400, 18, rgba(0x000000AA));
-            draw_text(5, 1, 0.38f, rgba(COLOR_ACCENT), dl_buf);
+                snprintf(dl_line2, sizeof(dl_line2), "%.1fMB downloaded  (queue: %d)",
+                         now / (1024.0f*1024.0f), dl_queue_count());
+            draw_rect(0, 0, 400, 28, rgba(0x000000CC));
+            draw_text(5, 1, 0.38f, rgba(COLOR_ACCENT), dl_line1);
+            draw_text(5, 14, 0.38f, rgba(COLOR_TEXT_SECONDARY), dl_line2);
         }
     }
 

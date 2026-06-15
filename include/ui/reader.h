@@ -47,6 +47,13 @@ void reader_cleanup(void);
  */
 void reader_open_book(const jfin_session_t *session, const char *item_id);
 
+/**
+ * Open a local CBZ file directly (no download needed).
+ * path is the full SD card path (e.g. sdmc:/3ds/jellyfin-3ds/cbz_ITEMID.cbz).
+ * State advances to READER_READY (or READER_ERROR).
+ */
+void reader_open_local(const char *path);
+
 /** Cancel an in-progress download. State returns to READER_IDLE. */
 void reader_cancel(void);
 
@@ -74,11 +81,29 @@ int reader_page_count(void);
 /** True when a page has been loaded and is ready to draw. */
 bool reader_page_ready(void);
 
+/** Pixel dimensions of the loaded page texture (0 if no page loaded). */
+int reader_page_width(void);
+int reader_page_height(void);
+
 /**
- * Draw the current page using a simple aspect-fit.
- * Rotation is baked into the texture by reader_load_page — no angle needed here.
+ * Draw the current page with aspect-fit, zoom, and pan.
+ * zoom=1.0 means fit-to-viewport; pan values shift the image in screen pixels.
  */
-void reader_draw(float x, float y, float w, float h);
+void reader_draw(float x, float y, float w, float h,
+                 float zoom, float pan_x, float pan_y);
+
+/**
+ * Draw the top half of a split-screen page (top screen 400×240).
+ * Scale is based on fitting width to 400px, then multiplied by zoom.
+ * pan_y=0 shows the very top of the image; increase to scroll down.
+ */
+void reader_draw_split_top(float zoom, float pan_x, float pan_y);
+
+/**
+ * Draw the bottom half of a split-screen page (bottom screen 320×240).
+ * Continues seamlessly from reader_draw_split_top using the same parameters.
+ */
+void reader_draw_split_bottom(float zoom, float pan_x, float pan_y);
 
 #ifdef __cplusplus
 }
