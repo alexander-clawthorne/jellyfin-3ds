@@ -100,9 +100,10 @@ The top screen shows the page; the bottom screen shows page info and controls.
 | Button | Action |
 |--------|--------|
 | L / R or D-pad Left/Right | Previous / next page |
-| SELECT | Toggle rotation (portrait ↔ landscape) |
-| Circle pad Up/Down | Zoom in / out |
+| D-pad Up / Down | Zoom in / out |
+| Circle pad Up/Down | Pan vertically |
 | Circle pad Left/Right | Pan horizontally |
+| SELECT | Toggle rotation (portrait ↔ landscape) |
 | START | Enter split-screen mode |
 | B | Back to browse |
 
@@ -116,10 +117,10 @@ The page spans both screens (top screen = upper half, bottom screen = lower half
 | D-pad Up / Down | Zoom in / out |
 | Circle pad Up/Down | Scroll the page vertically |
 | Circle pad Left/Right | Pan horizontally |
-| START | Exit split-screen mode |
-| B | Exit split-screen mode (returns to normal) |
+| START | Return to normal mode (where SELECT rotates) |
+| B | Return to normal mode |
 
-When entering split mode the zoom is automatically set to fit the full page height across both screens (480px combined). You can then use D-pad to zoom and the circle pad to scroll and pan.
+When entering split mode the zoom is automatically set to fit the full page height across both screens (480px combined). D-pad zooms in both modes; circle pad always pans/scrolls.
 
 ### Downloads Manager
 
