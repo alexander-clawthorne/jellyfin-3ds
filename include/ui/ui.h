@@ -120,6 +120,10 @@ typedef struct {
     bool                 now_playing_offline;          /* true when playing from SD card */
     char                 now_playing_local_path[192];  /* sdmc: path of the local .ts file */
 
+    /* Music playback mode */
+    bool  shuffle_mode;  /* pick random next track on auto-advance */
+    int   repeat_mode;   /* 0=off  1=repeat-one  2=repeat-all */
+
     /* Downloads manager */
     int                  downloads_scroll;
     int                  downloads_index;
