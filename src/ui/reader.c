@@ -112,13 +112,13 @@ bool reader_load_page(const jfin_session_t *session,
     if (!s_rdr.init) return false;
     s_rdr.ready = false;
 
-    /* Build image URL — request up to 512x512 so the server picks the
-     * best scale for the native page aspect ratio */
+    /* CBZ pages are stored as Chapter images in Jellyfin, indexed by path
+     * segment: GET /Items/{id}/Images/Chapter/{N}
+     * /Images/Primary?imageIndex=N is a different (wrong) endpoint. */
     char url[JFIN_URL_BUF];
     snprintf(url, sizeof(url),
-             "%s/Items/%s/Images/Primary"
-             "?imageIndex=%d&maxWidth=%d&maxHeight=%d"
-             "&format=Jpg&quality=85",
+             "%s/Items/%s/Images/Chapter/%d"
+             "?maxWidth=%d&maxHeight=%d&format=Jpg&quality=85",
              session->server_url, item_id, page_index,
              PAGE_TEX_W, PAGE_TEX_H);
 
