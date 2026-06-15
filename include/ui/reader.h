@@ -52,10 +52,12 @@ void reader_cancel(void);
 
 /**
  * Extract, decode, and upload page[idx] to the GPU.
+ * Pass rotated=true to bake a 90° CCW rotation into the pixel data so
+ * reader_draw can always do a simple aspect-fit (no GPU rotation needed).
  * Call only when reader_get_state() == READER_READY.
  * Synchronous but fast (~5–20 ms for decompress + Morton tile).
  */
-bool reader_load_page(int page_index);
+bool reader_load_page(int page_index, bool rotated);
 
 /** Current state. */
 reader_state_t reader_get_state(void);
@@ -73,12 +75,10 @@ int reader_page_count(void);
 bool reader_page_ready(void);
 
 /**
- * Draw the current page.
- * rotated=false: normal portrait fit within the rectangle.
- * rotated=true:  90° CCW rotation for landscape reading
- *                (turn 3DS clockwise, page fills the screen height-wise).
+ * Draw the current page using a simple aspect-fit.
+ * Rotation is baked into the texture by reader_load_page — no angle needed here.
  */
-void reader_draw(float x, float y, float w, float h, bool rotated);
+void reader_draw(float x, float y, float w, float h);
 
 #ifdef __cplusplus
 }
