@@ -109,6 +109,7 @@ typedef struct {
     /* Manga / comic reader */
     int                  reader_page;        /* current page index (0-based) */
     bool                 reader_load_page;   /* page extraction pending (CBZ already open) */
+    bool                 reader_rotated;     /* SELECT: 90° CCW for landscape reading */
 } ui_state_t;
 
 /* ── Lifecycle ───────────────────────────────────────────────────── */

@@ -72,8 +72,13 @@ int reader_page_count(void);
 /** True when a page has been loaded and is ready to draw. */
 bool reader_page_ready(void);
 
-/** Draw the current page centered/fitted in the given rectangle. */
-void reader_draw(float x, float y, float w, float h);
+/**
+ * Draw the current page.
+ * rotated=false: normal portrait fit within the rectangle.
+ * rotated=true:  90° CCW rotation for landscape reading
+ *                (turn 3DS clockwise, page fills the screen height-wise).
+ */
+void reader_draw(float x, float y, float w, float h, bool rotated);
 
 #ifdef __cplusplus
 }
