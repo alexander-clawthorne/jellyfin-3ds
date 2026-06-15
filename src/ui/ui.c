@@ -1210,12 +1210,12 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             }
         }
 
-        /* B: save and return to where we came from */
+        /* B: save and return — go to libraries if logged in, login screen if not */
         if (kdown & KEY_B) {
             config_save(&g_config);
-            if (state->previous_view == VIEW_LOGIN || state->previous_view == VIEW_DOWNLOADS) {
-                /* Came from login (offline) or downloads — no network call */
-                state->current_view = state->previous_view;
+            if (session->access_token[0] == '\0') {
+                /* Not authenticated — no network, just return to login */
+                state->current_view = VIEW_LOGIN;
             } else {
                 state->current_view = VIEW_LIBRARIES;
                 jfin_get_views(session, &state->items);
