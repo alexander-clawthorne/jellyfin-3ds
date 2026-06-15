@@ -28,8 +28,8 @@
 #include "util/stb_image.h"
 #include "util/log.h"
 
-#define PAGE_TEX_W   512
-#define PAGE_TEX_H   512
+#define PAGE_TEX_W   1024
+#define PAGE_TEX_H   1024
 #define CACHE_DIR    "sdmc:/3ds/jellyfin-3ds"
 #define DL_STACK     (48 * 1024)
 #define DL_PRIORITY  0x3C
@@ -493,8 +493,9 @@ void reader_draw_split_bottom(float zoom, float pan_x, float pan_y)
     if (!s_rdr.page_ready) return;
     float sc  = (400.0f / (float)s_rdr.pw) * zoom;
     float dw  = s_rdr.pw * sc;
-    /* Horizontal: same basis as top (400px wide) mapped into 320px screen */
-    float ix  = (400.0f - dw) * 0.5f + pan_x;
+    /* Centre horizontally within the 320px bottom screen so the image
+     * doesn't appear shifted right relative to the narrower screen. */
+    float ix  = (320.0f - dw) * 0.5f + pan_x;
     /* Vertical: continue 240px below where the top screen started */
     float iy  = pan_y - 240.0f;
     C2D_DrawImageAt(s_rdr.img, ix, iy, 0.5f, NULL, sc, sc);

@@ -284,6 +284,30 @@ static void net_thread_func(void *arg)
 {
     (void)arg;
     log_write("NET: thread started");
+
+    /* Local file (sdmc:/) — bypass curl, read directly into ring buffer */
+    if (strncmp(s_vp.url, "sdmc:", 5) == 0) {
+        log_write("NET: local file %s", s_vp.url);
+        FILE *lf = fopen(s_vp.url, "rb");
+        if (!lf) {
+            log_write("NET: cannot open local file");
+            snprintf(s_vp.error_msg, sizeof(s_vp.error_msg), "Cannot open local file");
+            s_vp.state = VIDEO_ERROR;
+            __atomic_store_n(&s_vp.demux.ring_finished, true, __ATOMIC_RELEASE);
+            return;
+        }
+        static char s_local_buf[65536];
+        size_t n;
+        while (!s_vp.stop_requested &&
+               (n = fread(s_local_buf, 1, sizeof(s_local_buf), lf)) > 0) {
+            net_write_cb(s_local_buf, 1, n, &s_vp.demux);
+        }
+        fclose(lf);
+        __atomic_store_n(&s_vp.demux.ring_finished, true, __ATOMIC_RELEASE);
+        log_write("NET: local file done");
+        return;
+    }
+
     CURL *curl = curl_easy_init();
     if (!curl) {
         log_write("NET: curl_easy_init failed");
