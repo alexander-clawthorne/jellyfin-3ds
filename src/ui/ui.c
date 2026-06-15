@@ -495,6 +495,8 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                                                   state->subtitle_stream_index,
                                                   &stream) &&
                             video_player_play(stream.url, item->runtime_ticks, 0, mode_3d)) {
+                            state->now_playing_offline = false;
+                            state->now_playing_local_path[0] = '\0';
                             state->now_playing = *item;
                             state->has_now_playing = true;
                             state->playing_index = state->selected_index;
@@ -723,10 +725,14 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     state->current_view = state->previous_view;
                     break;
                 }
-                if (strncmp(vs.error_msg, "Video not ready", 15) == 0
-                    && state->video_retry_count < 3) {
+                /* Subtitle seeks need longer retries — server-side retranscode can take >10s */
+                int max_retries    = (state->subtitle_stream_index >= 0) ? 5 : 3;
+                int retry_interval = (state->subtitle_stream_index >= 0) ? 300 : 180;
+                if (!state->now_playing_offline
+                    && strncmp(vs.error_msg, "Video not ready", 15) == 0
+                    && state->video_retry_count < max_retries) {
                     if (state->video_retry_timer == 0) {
-                        state->video_retry_timer = 180;
+                        state->video_retry_timer = retry_interval;
                     } else {
                         state->video_retry_timer--;
                         if (state->video_retry_timer == 0) {
@@ -782,16 +788,22 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
 
                 jfin_stream_t stream;
                 if (vid_active) {
-                    vp_3d_mode_t mode_3d = item_3d_mode(&state->now_playing);
                     video_player_stop();
                     state->video_retry_count = 0;
                     state->video_retry_timer = 0;
-                    state->video_retry_ticks = new_pos;
-                    if (jfin_get_video_stream(session, state->now_playing.id, new_pos,
-                                              mode_3d != VP_3D_NONE,
-                                              state->subtitle_stream_index,
-                                              &stream))
-                        video_player_play(stream.url, state->now_playing.runtime_ticks, new_pos, mode_3d);
+                    if (state->now_playing_offline) {
+                        /* No true seeking in local TS — restart from beginning */
+                        state->video_retry_ticks = 0;
+                        video_player_play(state->now_playing_local_path, 0, 0, VP_3D_NONE);
+                    } else {
+                        vp_3d_mode_t mode_3d = item_3d_mode(&state->now_playing);
+                        state->video_retry_ticks = new_pos;
+                        if (jfin_get_video_stream(session, state->now_playing.id, new_pos,
+                                                  mode_3d != VP_3D_NONE,
+                                                  state->subtitle_stream_index,
+                                                  &stream))
+                            video_player_play(stream.url, state->now_playing.runtime_ticks, new_pos, mode_3d);
+                    }
                 } else {
                     audio_player_stop();
                     if (jfin_get_audio_stream(session, state->now_playing.id, new_pos, &stream))
@@ -799,7 +811,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 }
             }
             /* Y to cycle subtitle tracks */
-            if ((kdown & KEY_Y) && vid_active) {
+            if ((kdown & KEY_Y) && vid_active && !state->now_playing_offline) {
                 if (!state->subtitle_list_loaded) {
                     if (jfin_get_subtitle_streams(session, state->now_playing.id,
                                                   &state->subtitle_list))
@@ -1005,6 +1017,18 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             }
         }
 
+        /* D-pad Up/Down: zoom in/out (split mode only — normal mode uses circle pad) */
+        if (state->reader_split && rs == READER_READY && reader_page_ready()) {
+            if (kdown & KEY_DUP) {
+                state->reader_zoom *= 1.1f;
+                if (state->reader_zoom > 5.0f) state->reader_zoom = 5.0f;
+            }
+            if (kdown & KEY_DDOWN) {
+                state->reader_zoom *= 0.9f;
+                if (state->reader_zoom < 0.2f) state->reader_zoom = 0.2f;
+            }
+        }
+
         /* SELECT: toggle portrait/landscape — re-extract page with new rotation */
         if (kdown & KEY_SELECT) {
             state->reader_rotated   = !state->reader_rotated;
@@ -1130,6 +1154,9 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                         strncpy(state->now_playing.name, e->name, sizeof(state->now_playing.name)-1);
                         state->now_playing.name[sizeof(state->now_playing.name)-1] = '\0';
                         state->has_now_playing = true;
+                        state->now_playing_offline = true;
+                        snprintf(state->now_playing_local_path,
+                                 sizeof(state->now_playing_local_path), "%s", e->path);
                         state->previous_view   = state->current_view;
                         state->current_view    = VIEW_NOW_PLAYING;
                     }
@@ -1376,14 +1403,16 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     }
 
     if (is_video && vstatus.state == VIDEO_ERROR) {
-        bool retrying = (strncmp(vstatus.error_msg, "Video not ready", 15) == 0)
-                        && state->video_retry_count < 3
+        int max_retries = (state->subtitle_stream_index >= 0) ? 5 : 3;
+        bool retrying = !state->now_playing_offline
+                        && (strncmp(vstatus.error_msg, "Video not ready", 15) == 0)
+                        && state->video_retry_count < max_retries
                         && state->video_retry_timer > 0;
         if (retrying) {
             int secs = (state->video_retry_timer + 59) / 60;
             char rbuf[48];
-            snprintf(rbuf, sizeof(rbuf), "Retrying in %ds (%d/3)...", secs,
-                     state->video_retry_count + 1);
+            snprintf(rbuf, sizeof(rbuf), "Retrying in %ds (%d/%d)...", secs,
+                     state->video_retry_count + 1, max_retries);
             draw_text(60, 80, 0.65f, rgba(COLOR_PRIMARY), "Subtitle transcode starting");
             draw_text(40, 120, 0.5f, rgba(COLOR_TEXT_PRIMARY), rbuf);
             draw_text(30, 155, 0.5f, rgba(COLOR_TEXT_SECONDARY), state->now_playing.name);
@@ -1509,7 +1538,9 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     /* Subtitle status */
     if (is_video) {
         char sub_str[64];
-        if (state->subtitle_stream_index >= 0) {
+        if (state->now_playing_offline) {
+            snprintf(sub_str, sizeof(sub_str), "Subs: Encoded at download");
+        } else if (state->subtitle_stream_index >= 0) {
             const char *label = state->subtitle_lang_pref[0]
                                 ? state->subtitle_lang_pref : "on";
             for (int si = 0; si < state->subtitle_list.count; si++) {
@@ -1530,9 +1561,14 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     }
 
     /* Controls hint */
-    draw_text(20, 180, 0.45f, rgba(COLOR_TEXT_PRIMARY),
-              is_video ? "A:Pause X:Stop B:Back L/R:Seek Y:Subs"
-                       : "A:Pause X:Stop B:Back L/R:Seek");
+    const char *ctl_hint;
+    if (!is_video)
+        ctl_hint = "A:Pause X:Stop B:Back L/R:Seek";
+    else if (state->now_playing_offline)
+        ctl_hint = "A:Pause X:Stop B:Back L/R:Restart";
+    else
+        ctl_hint = "A:Pause X:Stop B:Back L/R:Seek Y:Subs";
+    draw_text(20, 180, 0.45f, rgba(COLOR_TEXT_PRIMARY), ctl_hint);
 }
 
 void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
@@ -1870,10 +1906,10 @@ void ui_render(const ui_state_t *state, const jfin_session_t *session,
         C2D_TargetClear(s_top, bg_color());
         C2D_SceneBegin(s_top);
 
-        draw_text(100, 80, 1.0f, rgba(COLOR_PRIMARY), "Jellyfin 3DS");
-        draw_text(168, 118, 0.48f, rgba(COLOR_TEXT_SECONDARY), "v" JFIN_VERSION);
-        draw_text(50, 145, 0.4f, rgba(COLOR_ACCENT),
-                  "CBZ/Manga  •  Subtitles  •  Downloads");
+        draw_text(118, 80, 1.0f, rgba(COLOR_PRIMARY), "Jellyfin 3DS");
+        draw_text(179, 118, 0.48f, rgba(COLOR_TEXT_SECONDARY), "v" JFIN_VERSION);
+        draw_text(92, 145, 0.4f, rgba(COLOR_ACCENT),
+                  "CBZ/Manga  \xe2\x80\xa2  Subtitles  \xe2\x80\xa2  Downloads");
 
         /* Show mini now-playing bar if something is playing */
         if (state->has_now_playing && player->state == PLAYER_PLAYING) {
