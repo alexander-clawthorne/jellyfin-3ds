@@ -10,6 +10,8 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <dirent.h>
+#include <sys/stat.h>
 #include <3ds.h>
 #include <citro2d.h>
 
@@ -20,6 +22,7 @@
 #include "ui/album_art.h"
 #include "ui/reader.h"
 #include "util/config.h"
+#include "util/downloader.h"
 #include "util/log.h"
 
 extern jfin_config_t g_config;
@@ -43,6 +46,99 @@ static u32 rgba(u32 hex)
     u8 a = hex & 0xFF;
     return C2D_Color32(r, g, b, a);
 }
+
+static u32 bg_color(void)
+{
+    switch (g_config.bg_theme) {
+        case 1:  return rgba(0x000000FF);
+        case 2:  return rgba(0xEEEEEEFF);
+        case 3:  return rgba(0x505050FF);
+        default: return rgba(COLOR_BG_DARK);
+    }
+}
+
+/* ── Download manager (file list on SD card) ───────────────────────── */
+
+#define MAX_DL_ENTRIES 64
+
+typedef struct {
+    char name[128];   /* display name */
+    char path[192];   /* full path for deletion */
+    size_t sz;        /* bytes */
+    bool is_video;
+} dl_entry_t;
+
+static dl_entry_t s_dl_entries[MAX_DL_ENTRIES];
+static int        s_dl_count = 0;
+
+static void dl_manager_scan(void)
+{
+    s_dl_count = 0;
+    DIR *d = opendir(VDL_DIR);
+    if (!d) return;
+
+    struct dirent *de;
+    while ((de = readdir(d)) != NULL && s_dl_count < MAX_DL_ENTRIES) {
+        const char *n = de->d_name;
+        int nlen = (int)strlen(n);
+
+        bool is_cbz = (strncmp(n, "cbz_", 4) == 0 && nlen > 8 &&
+                       strcmp(n + nlen - 4, ".cbz") == 0);
+        bool is_vid = (strncmp(n, "video_", 6) == 0 && nlen > 9 &&
+                       strcmp(n + nlen - 3, ".ts") == 0);
+        if (!is_cbz && !is_vid) continue;
+
+        dl_entry_t *e = &s_dl_entries[s_dl_count++];
+        e->is_video = is_vid;
+
+        snprintf(e->path, sizeof(e->path), "%s/%s", VDL_DIR, n);
+
+        struct stat st;
+        e->sz = (stat(e->path, &st) == 0) ? (size_t)st.st_size : 0;
+
+        if (is_vid) {
+            /* Try companion title file */
+            char txt[192];
+            snprintf(txt, sizeof(txt), "%s/%.*s.txt", VDL_DIR, nlen - 3, n);
+            FILE *f = fopen(txt, "r");
+            if (f) {
+                if (fgets(e->name, sizeof(e->name), f)) {
+                    int l = (int)strlen(e->name);
+                    while (l > 0 && (e->name[l-1] == '\n' || e->name[l-1] == '\r'))
+                        e->name[--l] = '\0';
+                }
+                fclose(f);
+            } else {
+                /* Derive from filename: strip "video_" prefix and ".ts" suffix */
+                int id_len = nlen - 6 - 3;
+                snprintf(e->name, sizeof(e->name), "video %.*s",
+                         id_len > 20 ? 20 : id_len, n + 6);
+            }
+        } else {
+            /* CBZ: strip "cbz_" prefix and ".cbz" suffix */
+            int id_len = nlen - 4 - 4;
+            snprintf(e->name, sizeof(e->name), "book %.*s",
+                     id_len > 20 ? 20 : id_len, n + 4);
+        }
+    }
+    closedir(d);
+}
+
+static void dl_manager_delete(int idx)
+{
+    if (idx < 0 || idx >= s_dl_count) return;
+    remove(s_dl_entries[idx].path);
+    if (s_dl_entries[idx].is_video) {
+        /* Also remove companion txt */
+        const char *p = s_dl_entries[idx].path;
+        int plen = (int)strlen(p);
+        char txt[196];
+        snprintf(txt, sizeof(txt), "%.*s.txt", plen - 3, p); /* replace .ts with .txt */
+        remove(txt);
+    }
+}
+
+static int dl_manager_count(void) { return s_dl_count; }
 
 static void draw_text(float x, float y, float size, u32 color, const char *text)
 {
@@ -92,13 +188,16 @@ enum {
     SET_AUDIO_BITRATE,
     SET_VIDEO_BITRATE,
     SET_AUTO_ADVANCE,
-    SET_SEPARATOR_ACCOUNT,   /* non-selectable divider */
-    SET_SERVER,              /* display-only */
-    SET_USERNAME,            /* display-only */
-    SET_LOGOUT,              /* action */
-    SET_SEPARATOR_ABOUT,     /* non-selectable divider */
-    SET_VERSION,             /* display-only */
-    SET_DEVICE_ID,           /* display-only */
+    SET_BG_THEME,
+    SET_SEPARATOR_ACCOUNT,      /* non-selectable divider */
+    SET_SERVER,                 /* display-only */
+    SET_USERNAME,               /* display-only */
+    SET_LOGOUT,                 /* action */
+    SET_SEPARATOR_DOWNLOADS,    /* non-selectable divider */
+    SET_DOWNLOADS,              /* action: open downloads manager */
+    SET_SEPARATOR_ABOUT,        /* non-selectable divider */
+    SET_VERSION,                /* display-only */
+    SET_DEVICE_ID,              /* display-only */
     SET_COUNT
 };
 
@@ -109,7 +208,9 @@ static const int video_rates[] = {256, 472, 768};
 
 static bool settings_is_separator(int idx)
 {
-    return idx == SET_SEPARATOR_ACCOUNT || idx == SET_SEPARATOR_ABOUT;
+    return idx == SET_SEPARATOR_ACCOUNT ||
+           idx == SET_SEPARATOR_DOWNLOADS ||
+           idx == SET_SEPARATOR_ABOUT;
 }
 
 static int settings_next_selectable(int from, int dir)
@@ -161,6 +262,7 @@ bool ui_init(void)
 
 void ui_cleanup(void)
 {
+    dl_cleanup();
     if (s_text_buf) {
         C2D_TextBufDelete(s_text_buf);
         s_text_buf = NULL;
@@ -456,6 +558,21 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     jfin_get_items(session, parent_id, prev_start, JFIN_MAX_ITEMS, &state->items);
                     state->selected_index = 0;
                     state->scroll_offset = 0;
+                }
+            }
+        }
+        /* X: download video with subtitles burned in (video items only) */
+        if (kdown & KEY_X) {
+            if (state->selected_index < state->items.count) {
+                jfin_item_t *item = &state->items.items[state->selected_index];
+                bool is_video = (item->type == JFIN_ITEM_MOVIE ||
+                                 item->type == JFIN_ITEM_EPISODE);
+                if (is_video && dl_get_state() == DL_IDLE) {
+                    jfin_stream_t stream;
+                    if (jfin_get_video_stream(session, item->id, 0, false,
+                                             state->subtitle_stream_index, &stream)) {
+                        dl_start_video(item->id, item->name, stream.url);
+                    }
                 }
             }
         }
@@ -768,7 +885,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
 
         /* Once the CBZ is ready, load the pending page */
         if (rs == READER_READY && state->reader_load_page) {
-            reader_load_page(state->reader_page);
+            reader_load_page(state->reader_page, state->reader_rotated);
             state->reader_load_page = false;
         }
 
@@ -793,9 +910,11 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             }
         }
 
-        /* SELECT: toggle portrait/landscape reading orientation */
-        if (kdown & KEY_SELECT)
-            state->reader_rotated = !state->reader_rotated;
+        /* SELECT: toggle portrait/landscape — re-extract page with new rotation */
+        if (kdown & KEY_SELECT) {
+            state->reader_rotated   = !state->reader_rotated;
+            state->reader_load_page = true;
+        }
 
         /* B: back (cancel download if in progress) */
         if (kdown & KEY_B) {
@@ -834,6 +953,8 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     if (g_config.video_bitrate == video_rates[i]) { cur = i; break; }
                 cur = (cur + dir + VIDEO_RATES_COUNT) % VIDEO_RATES_COUNT;
                 g_config.video_bitrate = video_rates[cur];
+            } else if (state->settings_index == SET_BG_THEME) {
+                g_config.bg_theme = (g_config.bg_theme + dir + 4) % 4;
             }
         }
 
@@ -842,6 +963,13 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             if (state->settings_index == SET_AUTO_ADVANCE) {
                 g_config.auto_advance = !g_config.auto_advance;
                 state->auto_advance = g_config.auto_advance;
+            } else if (state->settings_index == SET_BG_THEME) {
+                g_config.bg_theme = (g_config.bg_theme + 1) % 4;
+            } else if (state->settings_index == SET_DOWNLOADS) {
+                state->downloads_scroll = 0;
+                state->downloads_index  = 0;
+                state->downloads_loaded = false;
+                state->current_view = VIEW_DOWNLOADS;
             } else if (state->settings_index == SET_LOGOUT) {
                 jfin_session_t *s = (jfin_session_t *)session;
                 jfin_logout(s);
@@ -862,6 +990,28 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             state->selected_index = 0;
             state->scroll_offset = 0;
         }
+        break;
+
+    case VIEW_DOWNLOADS:
+        if (!state->downloads_loaded) {
+            dl_manager_scan();
+            state->downloads_loaded = true;
+            if (state->downloads_index >= dl_manager_count())
+                state->downloads_index = 0;
+        }
+        if (kdown & KEY_DUP && state->downloads_index > 0)
+            state->downloads_index--;
+        if (kdown & KEY_DDOWN && state->downloads_index < dl_manager_count() - 1)
+            state->downloads_index++;
+        if (kdown & KEY_X && state->downloads_index < dl_manager_count()) {
+            dl_manager_delete(state->downloads_index);
+            dl_manager_scan();
+            int cnt = dl_manager_count();
+            if (state->downloads_index >= cnt && cnt > 0)
+                state->downloads_index = cnt - 1;
+        }
+        if (kdown & KEY_B)
+            state->current_view = VIEW_SETTINGS;
         break;
     }
 }
@@ -1056,7 +1206,8 @@ void ui_render_browse(const ui_state_t *state)
     if (state->items.total_count > JFIN_MAX_ITEMS)
         draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY), "A:Sel B:Back L/R:Pg SEL:Search");
     else
-        draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY), "A:Sel B:Back Y:Playing SEL:Search");
+        draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
+                  "A:Play X:Download B:Back SEL:Search");
 }
 
 void ui_render_now_playing(const ui_state_t *state, const player_status_t *player)
@@ -1248,7 +1399,9 @@ void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
             /* Separator: thin line + label */
             float line_y = y + UI_LIST_ITEM_HEIGHT / 2;
             draw_rect(10, line_y, 300, 1, rgba(COLOR_SEPARATOR));
-            const char *sep_label = (idx == SET_SEPARATOR_ACCOUNT) ? "Account" : "About";
+            const char *sep_label = (idx == SET_SEPARATOR_ACCOUNT)   ? "Account"
+                                 : (idx == SET_SEPARATOR_DOWNLOADS) ? "Downloads"
+                                                                     : "About";
             draw_text(15, line_y + 4, 0.4f, rgba(COLOR_TEXT_SECONDARY), sep_label);
             continue;
         }
@@ -1273,6 +1426,17 @@ void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
         case SET_AUTO_ADVANCE:
             label = "Auto-advance";
             snprintf(value, sizeof(value), "%s", g_config.auto_advance ? "On" : "Off");
+            break;
+        case SET_BG_THEME: {
+            label = "Background";
+            const char *themes[] = { "Dark", "Black", "White", "Grey" };
+            int th = (g_config.bg_theme >= 0 && g_config.bg_theme < 4) ? g_config.bg_theme : 0;
+            snprintf(value, sizeof(value), "%s", themes[th]);
+            break;
+        }
+        case SET_DOWNLOADS:
+            label = "Manage Downloads";
+            snprintf(value, sizeof(value), "A: Open");
             break;
         case SET_SERVER:
             label = "Server";
@@ -1322,11 +1486,11 @@ void ui_render_reader(const ui_state_t *state)
     reader_state_t rs = reader_get_state();
 
     /* Top screen: page image or status overlay */
-    C2D_TargetClear(s_top, C2D_Color32(0, 0, 0, 255));
+    C2D_TargetClear(s_top, bg_color());
     C2D_SceneBegin(s_top);
 
     if (reader_page_ready()) {
-        reader_draw(0, 0, TOP_SCREEN_WIDTH, TOP_SCREEN_HEIGHT, state->reader_rotated);
+        reader_draw(0, 0, TOP_SCREEN_WIDTH, TOP_SCREEN_HEIGHT);
     } else if (rs == READER_DOWNLOADING) {
         size_t total = reader_dl_total();
         size_t bytes = reader_dl_bytes();
@@ -1390,6 +1554,79 @@ void ui_render_reader(const ui_state_t *state)
     }
 }
 
+/* ── Downloads manager render ──────────────────────────────────────── */
+
+void ui_render_downloads(const ui_state_t *state)
+{
+    C2D_TargetClear(s_top, rgba(COLOR_BG_DARK));
+    C2D_SceneBegin(s_top);
+    draw_text(60, 80, 0.6f, rgba(COLOR_PRIMARY), "Manage Downloads");
+    draw_text(50, 120, 0.45f, rgba(COLOR_TEXT_SECONDARY), "X:Delete  B:Back");
+
+    /* Show active video download status on top screen */
+    dl_state_t vds = dl_get_state();
+    if (vds == DL_ACTIVE) {
+        size_t tot = dl_total(), now = dl_bytes();
+        char buf[64];
+        if (tot > 0)
+            snprintf(buf, sizeof(buf), "Downloading: %.1f/%.1f MB",
+                     now  / (1024.0f * 1024.0f),
+                     tot  / (1024.0f * 1024.0f));
+        else
+            snprintf(buf, sizeof(buf), "Downloading: %.1f MB",
+                     now / (1024.0f * 1024.0f));
+        draw_text(30, 160, 0.42f, rgba(COLOR_ACCENT), dl_item_name());
+        draw_text(30, 178, 0.42f, rgba(COLOR_TEXT_SECONDARY), buf);
+    } else if (vds == DL_DONE) {
+        draw_text(80, 160, 0.42f, rgba(0x88FF88FF), "Last download complete");
+    } else if (vds == DL_ERROR) {
+        draw_text(80, 160, 0.42f, rgba(COLOR_DANGER), "Last download failed");
+    }
+
+    C2D_TargetClear(s_bottom, rgba(COLOR_BG_DARK));
+    C2D_SceneBegin(s_bottom);
+
+    draw_text(10, 5, 0.55f, rgba(COLOR_PRIMARY), "Downloads");
+
+    int cnt = dl_manager_count();
+    if (cnt == 0) {
+        draw_text(40, 100, 0.48f, rgba(COLOR_TEXT_SECONDARY), "No downloaded files");
+        draw_text(20, 130, 0.42f, rgba(COLOR_TEXT_SECONDARY), "Browse videos, press X to download");
+        draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY), "B:Back");
+        return;
+    }
+
+    for (int i = 0; i < UI_MAX_VISIBLE_ITEMS + 1 && i + state->downloads_scroll < cnt; i++) {
+        int idx = state->downloads_scroll + i;
+        float y = 30 + i * UI_LIST_ITEM_HEIGHT;
+        bool sel = (idx == state->downloads_index);
+
+        draw_list_item_bg(y, 310, UI_LIST_ITEM_HEIGHT - 4, sel);
+
+        /* Truncate name to fit */
+        char disp[40];
+        snprintf(disp, sizeof(disp), "%.36s%s",
+                 s_dl_entries[idx].name,
+                 strlen(s_dl_entries[idx].name) > 36 ? "..." : "");
+
+        draw_text(14, y + 4, 0.45f, rgba(COLOR_TEXT_PRIMARY), disp);
+
+        char size_str[20];
+        float sz_mb = s_dl_entries[idx].sz / (1024.0f * 1024.0f);
+        if (sz_mb >= 1.0f)
+            snprintf(size_str, sizeof(size_str), "%.1fMB", sz_mb);
+        else
+            snprintf(size_str, sizeof(size_str), "%zuKB", s_dl_entries[idx].sz / 1024);
+
+        const char *type = s_dl_entries[idx].is_video ? "VID" : "CBZ";
+        char meta[32];
+        snprintf(meta, sizeof(meta), "%s %s", type, size_str);
+        draw_text(220, y + 4, 0.4f, rgba(COLOR_TEXT_SECONDARY), meta);
+    }
+
+    draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY), "D-pad:Select  X:Delete  B:Back");
+}
+
 /* ── Main render dispatch ──────────────────────────────────────────── */
 
 void ui_render(const ui_state_t *state, const jfin_session_t *session,
@@ -1408,11 +1645,13 @@ void ui_render(const ui_state_t *state, const jfin_session_t *session,
     C2D_TextBufClear(s_text_buf);
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
-    /* Top screen: branding, now-playing, or reader (both screens) */
+    /* Top screen: branding, now-playing, or view-specific full render */
     if (state->current_view == VIEW_NOW_PLAYING) {
         ui_render_now_playing(state, player);
     } else if (state->current_view == VIEW_READER) {
         ui_render_reader(state);
+    } else if (state->current_view == VIEW_DOWNLOADS) {
+        ui_render_downloads(state);
     } else {
         C2D_TargetClear(s_top, rgba(COLOR_BG_DARK));
         C2D_SceneBegin(s_top);
@@ -1428,6 +1667,20 @@ void ui_render(const ui_state_t *state, const jfin_session_t *session,
             draw_text(10, 215, 0.45f, rgba(COLOR_TEXT_PRIMARY),
                       state->now_playing.name);
             draw_text(340, 215, 0.4f, rgba(COLOR_ACCENT), "Y: View");
+        }
+
+        /* Video download progress toast */
+        if (dl_get_state() == DL_ACTIVE) {
+            size_t tot = dl_total(), now = dl_bytes();
+            char dl_buf[48];
+            if (tot > 0)
+                snprintf(dl_buf, sizeof(dl_buf), "DL %.1f/%.1fMB",
+                         now / (1024.0f * 1024.0f), tot / (1024.0f * 1024.0f));
+            else
+                snprintf(dl_buf, sizeof(dl_buf), "DL %.1fMB",
+                         now / (1024.0f * 1024.0f));
+            draw_rect(0, 0, 400, 18, rgba(0x000000AA));
+            draw_text(5, 1, 0.38f, rgba(COLOR_ACCENT), dl_buf);
         }
     }
 
@@ -1450,6 +1703,9 @@ void ui_render(const ui_state_t *state, const jfin_session_t *session,
         break;
     case VIEW_SETTINGS:
         ui_render_settings(state, session);
+        break;
+    case VIEW_DOWNLOADS:
+        /* Already rendered above (both screens) */
         break;
     }
 
