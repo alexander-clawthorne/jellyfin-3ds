@@ -115,10 +115,22 @@ static void dl_manager_scan(void)
                          id_len > 20 ? 20 : id_len, n + 6);
             }
         } else {
-            /* CBZ: strip "cbz_" prefix and ".cbz" suffix */
-            int id_len = nlen - 4 - 4;
-            snprintf(e->name, sizeof(e->name), "book %.*s",
-                     id_len > 20 ? 20 : id_len, n + 4);
+            /* CBZ: try companion .txt for human-readable name (breadcrumb) */
+            char txt[192];
+            snprintf(txt, sizeof(txt), "%s/%.*s.txt", VDL_DIR, nlen - 4, n);
+            FILE *f = fopen(txt, "r");
+            if (f) {
+                if (fgets(e->name, sizeof(e->name), f)) {
+                    int l = (int)strlen(e->name);
+                    while (l > 0 && (e->name[l-1] == '\n' || e->name[l-1] == '\r'))
+                        e->name[--l] = '\0';
+                }
+                fclose(f);
+            } else {
+                int id_len = nlen - 4 - 4;
+                snprintf(e->name, sizeof(e->name), "book %.*s",
+                         id_len > 20 ? 20 : id_len, n + 4);
+            }
         }
     }
     closedir(d);
@@ -532,6 +544,19 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     state->reader_pan_y     = 0.0f;
                     state->previous_view    = state->current_view;
                     state->current_view     = VIEW_READER;
+                    /* Save companion .txt so downloads manager shows a readable name */
+                    {
+                        char cbz_meta[192];
+                        snprintf(cbz_meta, sizeof(cbz_meta),
+                                 VDL_DIR "/cbz_%s.txt", item->id);
+                        FILE *mf = fopen(cbz_meta, "w");
+                        if (mf) {
+                            for (int _d = 1; _d < state->parent_depth; _d++)
+                                fprintf(mf, "%s / ", state->parent_stack_names[_d]);
+                            fprintf(mf, "%s", item->name);
+                            fclose(mf);
+                        }
+                    }
                     reader_open_book(session, item->id);
                 }
                 /* JFIN_ITEM_UNKNOWN: do nothing */
@@ -952,19 +977,22 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             }
         }
 
-        /* Circle pad: horizontal pan always; vertical = zoom in normal, pan in split */
+        /* Circle pad: horizontal pan always; vertical = zoom in normal, pan in split.
+         * Pan direction: stick right → image shifts left (pans viewport right),
+         * same as scrolling. Stick up → image shifts up (pans viewport down). */
         if (rs == READER_READY && reader_page_ready()) {
             circlePosition circle;
             hidCircleRead(&circle);
             const float dead = 0.15f;
             float cx = (float)circle.dx / 155.0f;
             float cy = (float)circle.dy / 155.0f;
-            if (cx >  dead) state->reader_pan_x += 3.0f;
-            else if (cx < -dead) state->reader_pan_x -= 3.0f;
+            /* Horizontal: push right → viewport pans right → image moves left */
+            if (cx >  dead) state->reader_pan_x -= 3.0f;
+            else if (cx < -dead) state->reader_pan_x += 3.0f;
             if (state->reader_split) {
-                /* Up/down scrolls through the page vertically */
-                if (cy >  dead) state->reader_pan_y -= 3.0f;
-                else if (cy < -dead) state->reader_pan_y += 3.0f;
+                /* Vertical scroll: push up → see higher on the page → image moves up */
+                if (cy >  dead) state->reader_pan_y += 3.0f;
+                else if (cy < -dead) state->reader_pan_y -= 3.0f;
             } else {
                 /* Up = zoom in, down = zoom out */
                 if (cy > dead) {
@@ -1711,27 +1739,59 @@ void ui_render_downloads(const ui_state_t *state)
 {
     C2D_TargetClear(s_top, bg_color());
     C2D_SceneBegin(s_top);
-    draw_text(60, 80, 0.6f, rgba(COLOR_PRIMARY), "Manage Downloads");
-    draw_text(50, 120, 0.45f, rgba(COLOR_TEXT_SECONDARY), "X:Delete  B:Back");
 
-    /* Show active video download status on top screen */
+    draw_text(10, 4, 0.52f, rgba(COLOR_PRIMARY), "Download Status");
+
     dl_state_t vds = dl_get_state();
+    int qcnt = dl_queue_count();
+
+    /* Active download */
     if (vds == DL_ACTIVE) {
         size_t tot = dl_total(), now = dl_bytes();
-        char buf[64];
-        if (tot > 0)
-            snprintf(buf, sizeof(buf), "Downloading: %.1f/%.1f MB",
-                     now  / (1024.0f * 1024.0f),
-                     tot  / (1024.0f * 1024.0f));
-        else
-            snprintf(buf, sizeof(buf), "Downloading: %.1f MB",
-                     now / (1024.0f * 1024.0f));
-        draw_text(30, 160, 0.42f, rgba(COLOR_ACCENT), dl_item_name());
-        draw_text(30, 178, 0.42f, rgba(COLOR_TEXT_SECONDARY), buf);
+        draw_text(10, 26, 0.42f, rgba(COLOR_ACCENT), dl_item_name());
+        if (dl_sub_name()[0]) {
+            char si[80];
+            snprintf(si, sizeof(si), "Subs: %s", dl_sub_name());
+            draw_text(10, 43, 0.38f, rgba(COLOR_VALUE), si);
+        }
+        char prog[64];
+        if (tot > 0) {
+            snprintf(prog, sizeof(prog), "%.1f / %.1f MB  (%.0f%%)",
+                     now/(1024.0f*1024.0f), tot/(1024.0f*1024.0f),
+                     (float)now/(float)tot*100.0f);
+            draw_rect(10, 60, 380, 7, rgba(COLOR_BG_CARD));
+            draw_rect(10, 60, (int)(380.0f*(float)now/(float)tot), 7, rgba(COLOR_PRIMARY));
+        } else {
+            snprintf(prog, sizeof(prog), "%.1f MB downloaded", now/(1024.0f*1024.0f));
+        }
+        draw_text(10, 70, 0.38f, rgba(COLOR_TEXT_SECONDARY), prog);
+        draw_text(10, 228, 0.36f, rgba(COLOR_TEXT_SECONDARY), "Y: Cancel current download");
     } else if (vds == DL_DONE) {
-        draw_text(80, 160, 0.42f, rgba(0x88FF88FF), "Last download complete");
+        draw_text(10, 26, 0.42f, rgba(0x88FF88FF), "Last download complete");
     } else if (vds == DL_ERROR) {
-        draw_text(80, 160, 0.42f, rgba(COLOR_DANGER), "Last download failed");
+        draw_text(10, 26, 0.42f, rgba(COLOR_DANGER), "Last download failed");
+    } else {
+        draw_text(10, 26, 0.42f, rgba(COLOR_TEXT_SECONDARY), "No active download");
+        draw_text(10, 42, 0.38f, rgba(COLOR_TEXT_SECONDARY), "Browse items and press X to queue");
+    }
+
+    /* Queue list */
+    int qy = 90;
+    if (qcnt > 0) {
+        char qhdr[32];
+        snprintf(qhdr, sizeof(qhdr), "Queue: %d item%s", qcnt, qcnt == 1 ? "" : "s");
+        draw_text(10, qy, 0.44f, rgba(COLOR_TEXT_PRIMARY), qhdr);
+        qy += 18;
+        for (int qi = 0; qi < qcnt && qi < 6; qi++) {
+            char ql[72];
+            snprintf(ql, sizeof(ql), "  %d. %.52s", qi + 1, dl_queue_item_name(qi));
+            draw_text(10, qy, 0.38f, rgba(COLOR_TEXT_SECONDARY), ql);
+            qy += 15;
+        }
+        if (qcnt > 6)
+            draw_text(10, qy, 0.36f, rgba(COLOR_TEXT_SECONDARY), "  ...");
+    } else if (vds != DL_ACTIVE) {
+        draw_text(10, qy, 0.40f, rgba(COLOR_TEXT_SECONDARY), "Queue empty");
     }
 
     C2D_TargetClear(s_bottom, bg_color());
