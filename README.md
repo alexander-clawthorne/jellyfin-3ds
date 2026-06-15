@@ -86,10 +86,12 @@ When you press X to download a video, the currently selected subtitle track is b
 | X | Stop |
 | B | Back to browse |
 | L / R | Seek −30 / +30 seconds |
-| Y | Toggle subtitles on / off |
+| Y | Toggle subtitles on / off (online only) |
 | D-pad Down | Watch mode (hide controls) |
 | D-pad Up | Show controls |
 | START | Exit app |
+
+**Offline playback** (files opened from Downloads Manager): subtitles are burned in at download time — the Y button is disabled. L/R restarts the file from the beginning (mid-file seeking is not available for downloaded TS files).
 
 ### Manga Reader — Normal mode
 
@@ -111,12 +113,13 @@ The page spans both screens (top screen = upper half, bottom screen = lower half
 | Button | Action |
 |--------|--------|
 | L / R or D-pad Left/Right | Previous / next page |
+| D-pad Up / Down | Zoom in / out |
 | Circle pad Up/Down | Scroll the page vertically |
 | Circle pad Left/Right | Pan horizontally |
 | START | Exit split-screen mode |
 | B | Exit split-screen mode (returns to normal) |
 
-When entering split mode the zoom is automatically set to fit the full page height across both screens (480px combined). You can then use the circle pad to scroll and pan.
+When entering split mode the zoom is automatically set to fit the full page height across both screens (480px combined). You can then use D-pad to zoom and the circle pad to scroll and pan.
 
 ### Downloads Manager
 

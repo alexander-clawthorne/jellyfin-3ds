@@ -116,6 +116,10 @@ typedef struct {
     float                reader_pan_x;       /* horizontal offset in pixels */
     float                reader_pan_y;       /* vertical offset (split mode: scroll) */
 
+    /* Offline playback (downloaded local file) */
+    bool                 now_playing_offline;          /* true when playing from SD card */
+    char                 now_playing_local_path[192];  /* sdmc: path of the local .ts file */
+
     /* Downloads manager */
     int                  downloads_scroll;
     int                  downloads_index;
