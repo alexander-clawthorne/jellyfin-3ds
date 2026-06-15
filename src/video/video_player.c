@@ -545,6 +545,17 @@ static void decode_thread_func(void *arg)
               s_vp.demux.video_width, s_vp.demux.video_height,
               s_vp.demux.video_stream_idx, s_vp.demux.audio_stream_idx);
 
+    /* Reject zero dimensions — subtitle burn-in transcodes can delay video
+     * output by several seconds; if the probe window closed before a single
+     * H.264 SPS arrived, dimensions are 0 and mvd_init(0,0) silently breaks. */
+    if (s_vp.demux.video_width == 0 || s_vp.demux.video_height == 0) {
+        log_write("DEC: video dimensions 0x0 — subtitle transcode not ready");
+        snprintf(s_vp.error_msg, sizeof(s_vp.error_msg), "Video not ready (retry)");
+        s_vp.state = VIDEO_ERROR;
+        demux_cleanup(&s_vp.demux);
+        return;
+    }
+
     /* Init MVD */
     if (!mvd_init(&s_vp.mvd, s_vp.demux.video_width, s_vp.demux.video_height)) {
         log_write("DEC: mvd_init FAILED");

@@ -158,6 +158,24 @@ bool jfin_get_latest(const jfin_session_t *session, const char *parent_id,
 bool jfin_search(const jfin_session_t *session, const char *query,
                  int limit, jfin_item_list_t *out);
 
+/* ── Subtitles ─────────────────────────────────────────────────────── */
+
+#define JFIN_MAX_SUBTITLES   10
+#define JFIN_SUBTITLE_TITLE  64
+
+typedef struct {
+    int  index;
+    char language[8];
+    char title[JFIN_SUBTITLE_TITLE];
+    bool is_default;
+    bool is_forced;
+} jfin_subtitle_t;
+
+typedef struct {
+    jfin_subtitle_t subs[JFIN_MAX_SUBTITLES];
+    int count;
+} jfin_subtitle_list_t;
+
 /* ── Streaming ─────────────────────────────────────────────────────── */
 
 /**
@@ -168,10 +186,19 @@ bool jfin_get_audio_stream(const jfin_session_t *session, const char *item_id,
 
 /**
  * Get a video stream URL. start_ticks = 0 for beginning, or seek position.
+ * subtitle_stream_index: pass -1 for no subtitles, or a MediaStream index
+ * from jfin_get_subtitle_streams() to burn subtitles into the transcode.
  */
 bool jfin_get_video_stream(const jfin_session_t *session, const char *item_id,
                            int64_t start_ticks, bool is_3d,
+                           int subtitle_stream_index,
                            jfin_stream_t *out);
+
+/**
+ * Fetch available subtitle tracks for a video item.
+ */
+bool jfin_get_subtitle_streams(const jfin_session_t *session, const char *item_id,
+                               jfin_subtitle_list_t *out);
 
 
 
