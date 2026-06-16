@@ -1077,6 +1077,88 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     }
                 }
             }
+            /* X (video): queue download of next undownloaded episode/item */
+            if ((kdown & KEY_X) && state->has_now_playing &&
+                    (vid_active || state->now_playing_local_path[0]) &&
+                    session->authenticated) {
+                /* Online path: state->items already holds the season list */
+                if (!state->now_playing_offline && state->playing_index >= 0) {
+                    for (int xi = state->playing_index + 1;
+                             xi < state->items.count; xi++) {
+                        jfin_item_t *cand = &state->items.items[xi];
+                        if (cand->type != JFIN_ITEM_EPISODE &&
+                            cand->type != JFIN_ITEM_MOVIE) continue;
+                        char chk[208];
+                        snprintf(chk, sizeof(chk), VDL_DIR "/video_%s.ts", cand->id);
+                        FILE *cf = fopen(chk, "rb");
+                        if (cf) { fclose(cf); continue; }
+                        jfin_stream_t xstream;
+                        vp_3d_mode_t xmode = item_3d_mode(cand);
+                        if (jfin_get_video_stream(session, cand->id, 0,
+                                                  xmode != VP_3D_NONE, -1, &xstream)) {
+                            char xname[256];
+                            if (cand->series_name[0])
+                                snprintf(xname, sizeof(xname), "%s / E%02d - %s",
+                                         cand->series_name, cand->index_number, cand->name);
+                            else
+                                snprintf(xname, sizeof(xname), "%s", cand->name);
+                            dl_queue_video(cand->id, xname, xstream.url, NULL);
+                        }
+                        break;
+                    }
+                } else {
+                    /* Offline path: look up parent from server, then fetch siblings */
+                    char xparent[JFIN_MAX_ID] = {0};
+                    if (state->now_playing.parent_id[0]) {
+                        strncpy(xparent, state->now_playing.parent_id, sizeof(xparent)-1);
+                    } else if (state->now_playing.id[0]) {
+                        jfin_get_item_parent_id(session, state->now_playing.id,
+                                                xparent, sizeof(xparent));
+                    }
+                    if (xparent[0]) {
+                        static jfin_item_list_t s_sibs;
+                        if (jfin_get_siblings(session, xparent, JFIN_MAX_ITEMS, &s_sibs)) {
+                            /* Find our position by id, fall back to index_number */
+                            int cur_pos = -1;
+                            for (int si = 0; si < s_sibs.count; si++) {
+                                if (strcmp(s_sibs.items[si].id, state->now_playing.id) == 0)
+                                    { cur_pos = si; break; }
+                            }
+                            if (cur_pos < 0 && state->now_playing.index_number > 0) {
+                                for (int si = 0; si < s_sibs.count; si++) {
+                                    if (s_sibs.items[si].index_number ==
+                                            state->now_playing.index_number)
+                                        { cur_pos = si; break; }
+                                }
+                            }
+                            for (int si = (cur_pos >= 0 ? cur_pos + 1 : 0);
+                                     si < s_sibs.count; si++) {
+                                jfin_item_t *cand = &s_sibs.items[si];
+                                if (cand->type != JFIN_ITEM_EPISODE &&
+                                    cand->type != JFIN_ITEM_MOVIE) continue;
+                                char chk[208];
+                                snprintf(chk, sizeof(chk), VDL_DIR "/video_%s.ts", cand->id);
+                                FILE *cf = fopen(chk, "rb");
+                                if (cf) { fclose(cf); continue; }
+                                jfin_stream_t xstream;
+                                vp_3d_mode_t xmode = item_3d_mode(cand);
+                                if (jfin_get_video_stream(session, cand->id, 0,
+                                                          xmode != VP_3D_NONE, -1, &xstream)) {
+                                    char xname[256];
+                                    if (cand->series_name[0])
+                                        snprintf(xname, sizeof(xname), "%s / E%02d - %s",
+                                                 cand->series_name, cand->index_number,
+                                                 cand->name);
+                                    else
+                                        snprintf(xname, sizeof(xname), "%s", cand->name);
+                                    dl_queue_video(cand->id, xname, xstream.url, NULL);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
             /* B: back to browse, keep playing */
             if (kdown & KEY_B) {
                 state->bottom_hidden = false;
@@ -1454,6 +1536,15 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                         state->now_playing_offline = true;
                         snprintf(state->now_playing_local_path,
                                  sizeof(state->now_playing_local_path), "%s", e->path);
+                        /* Extract item_id from "sdmc:/.../video_ITEMID.ts" */
+                        state->now_playing.id[0] = '\0';
+                        const char *fn = strrchr(e->path, '/');
+                        if (fn && strncmp(fn + 1, "video_", 6) == 0) {
+                            strncpy(state->now_playing.id, fn + 7,
+                                    sizeof(state->now_playing.id) - 1);
+                            char *dot = strrchr(state->now_playing.id, '.');
+                            if (dot) *dot = '\0';
+                        }
                         state->previous_view = state->current_view;
                         state->current_view  = VIEW_NOW_PLAYING;
                     }

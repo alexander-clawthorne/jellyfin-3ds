@@ -53,6 +53,7 @@ typedef struct {
     char album[JFIN_MAX_NAME];       /* for audio tracks */
     char artist[JFIN_MAX_NAME];      /* for audio tracks / albums */
     char series_name[JFIN_MAX_NAME]; /* for episodes */
+    char parent_id[JFIN_MAX_ID];     /* season/album/folder that contains this item */
     jfin_item_type_t type;
     int  year;
     int  index_number;               /* track/episode number */
@@ -142,6 +143,21 @@ bool jfin_get_views(const jfin_session_t *session, jfin_item_list_t *out);
  */
 bool jfin_get_items(const jfin_session_t *session, const char *parent_id,
                     int start_index, int limit, jfin_item_list_t *out);
+
+/**
+ * Get the parent ID of an item (one API call to /Users/{uid}/Items/{id}).
+ * Used to find siblings of a downloaded item for the "download next" feature.
+ * Returns false if the item isn't found or has no parent.
+ */
+bool jfin_get_item_parent_id(const jfin_session_t *session, const char *item_id,
+                              char *parent_id_out, int out_len);
+
+/**
+ * Get child items of a parent sorted by IndexNumber (episode/track order).
+ * Used by the "download next" feature to walk forward from the current item.
+ */
+bool jfin_get_siblings(const jfin_session_t *session, const char *parent_id,
+                       int limit, jfin_item_list_t *out);
 
 /**
  * Get "Continue Listening/Watching" items.

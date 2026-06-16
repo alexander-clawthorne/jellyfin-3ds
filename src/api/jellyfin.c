@@ -253,6 +253,7 @@ static void parse_item(const cJSON *obj, jfin_item_t *item)
     json_get_string(obj, "Name", item->name, sizeof(item->name));
     json_get_string(obj, "Album", item->album, sizeof(item->album));
     json_get_string(obj, "SeriesName", item->series_name, sizeof(item->series_name));
+    json_get_string(obj, "ParentId", item->parent_id, sizeof(item->parent_id));
     item->year = json_get_int(obj, "ProductionYear", 0);
     item->index_number = json_get_int(obj, "IndexNumber", 0);
     item->runtime_ticks = json_get_int64(obj, "RunTimeTicks", 0);
@@ -429,7 +430,7 @@ bool jfin_get_items(const jfin_session_t *session, const char *parent_id,
     snprintf(url, sizeof(url),
              "%s/Users/%s/Items?ParentId=%s&StartIndex=%d&Limit=%d"
              "&SortBy=SortName&SortOrder=Ascending"
-             "&Fields=PrimaryImageAspectRatio,BasicSyncInfo",
+             "&Fields=PrimaryImageAspectRatio,BasicSyncInfo,ParentId",
              session->server_url, session->user_id, parent_id,
              start_index, limit);
 
@@ -503,6 +504,36 @@ bool jfin_search(const jfin_session_t *session, const char *query,
     curl_free(encoded);
     if (!json) return false;
 
+    parse_item_list(json, out);
+    cJSON_Delete(json);
+    return true;
+}
+
+bool jfin_get_item_parent_id(const jfin_session_t *session, const char *item_id,
+                              char *parent_id_out, int out_len)
+{
+    char url[JFIN_URL_BUF];
+    snprintf(url, sizeof(url), "%s/Users/%s/Items/%s",
+             session->server_url, session->user_id, item_id);
+    cJSON *json = api_get(session, url);
+    if (!json) return false;
+    parent_id_out[0] = '\0';
+    json_get_string(json, "ParentId", parent_id_out, out_len);
+    cJSON_Delete(json);
+    return parent_id_out[0] != '\0';
+}
+
+bool jfin_get_siblings(const jfin_session_t *session, const char *parent_id,
+                       int limit, jfin_item_list_t *out)
+{
+    char url[JFIN_URL_BUF];
+    snprintf(url, sizeof(url),
+             "%s/Users/%s/Items?ParentId=%s&Limit=%d"
+             "&SortBy=IndexNumber&SortOrder=Ascending"
+             "&Fields=PrimaryImageAspectRatio,BasicSyncInfo,ParentId",
+             session->server_url, session->user_id, parent_id, limit);
+    cJSON *json = api_get(session, url);
+    if (!json) return false;
     parse_item_list(json, out);
     cJSON_Delete(json);
     return true;
