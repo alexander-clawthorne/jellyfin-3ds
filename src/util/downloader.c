@@ -196,6 +196,24 @@ bool dl_queue_book(const char *item_id, const char *display_name, const char *ur
     return true;
 }
 
+bool dl_queue_audio(const char *item_id, const char *display_name, const char *url)
+{
+    if (s_q_count >= DL_QUEUE_MAX) return false;
+    dl_q_item_t *q = &s_queue[s_q_count++];
+    strncpy(q->item_name, display_name, sizeof(q->item_name)-1);
+    q->item_name[sizeof(q->item_name)-1] = '\0';
+    strncpy(q->url, url, sizeof(q->url)-1);
+    q->url[sizeof(q->url)-1] = '\0';
+    q->sub_name[0] = '\0';
+    snprintf(q->save_path, sizeof(q->save_path), VDL_DIR "/audio_%s.mp3", item_id);
+    snprintf(q->meta_path, sizeof(q->meta_path), VDL_DIR "/audio_%s.txt", item_id);
+    strncpy(q->item_id, item_id, sizeof(q->item_id)-1);
+    q->item_id[sizeof(q->item_id)-1] = '\0';
+    q->is_video = false;
+    if (s_vdl.state == DL_IDLE) dl_process_queue();
+    return true;
+}
+
 void dl_process_queue(void)
 {
     if (s_vdl.state != DL_IDLE && s_vdl.state != DL_DONE && s_vdl.state != DL_ERROR)

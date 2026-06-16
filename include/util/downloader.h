@@ -37,6 +37,10 @@ bool dl_queue_video(const char *item_id, const char *item_name,
  * Skips download if the file already exists (reader cache hit). */
 bool dl_queue_book(const char *item_id, const char *display_name, const char *url);
 
+/* Queue an audio download. url should be a Jellyfin audio stream URL (MP3).
+ * Saves to: sdmc:/3ds/jellyfin-3ds/audio_ITEMID.mp3 */
+bool dl_queue_audio(const char *item_id, const char *display_name, const char *url);
+
 /* Start the next queued item if the downloader is idle. Call from main loop. */
 void dl_process_queue(void);
 

@@ -126,6 +126,11 @@ static struct {
     u64             last_fps_tick;
     float           decode_fps;
     float           display_fps;
+
+    /* Local-file seek calibration */
+    volatile long   net_bytes_read;  /* bytes fed from file in current session */
+    long            net_start_bytes; /* file byte offset where this session started */
+    double          local_calib_bpt; /* calibrated bytes-per-tick (0 = use duration est.) */
 } s_vp;
 
 /* Morton tiling offset tables — declared early, used by convert thread */
@@ -317,21 +322,34 @@ static void net_thread_func(void *arg)
                 }
             }
 
-            /* Approximate byte-level seek for ±30s L/R buttons */
+            /* Byte-level seek using calibrated ratio when available */
             int64_t dur = s_vp.duration_ticks;
             int64_t seek_hint = s_vp.seek_offset_ticks;
-            if (seek_hint > 0 && dur > 0) {
-                long seek_bytes = (long)((double)file_size *
-                    (double)seek_hint / (double)dur);
-                seek_bytes = (seek_bytes / 188) * 188;  /* align to TS packet boundary */
+            long seek_bytes = 0;
+            if (seek_hint > 0) {
+                if (s_vp.local_calib_bpt > 0.0) {
+                    seek_bytes = (long)(seek_hint * s_vp.local_calib_bpt);
+                } else if (dur > 0) {
+                    seek_bytes = (long)((double)file_size *
+                                        (double)seek_hint / (double)dur);
+                }
+                seek_bytes = (seek_bytes / 188) * 188;
                 if (seek_bytes > 0 && seek_bytes < file_size) {
                     fseek(lf, seek_bytes, SEEK_SET);
-                    log_write("NET: local seek to %ldB (%.1fs of %.1fs)",
+                    log_write("NET: local seek to %ldB (%.1fs, bpt=%.4f calib=%d)",
                               seek_bytes,
                               (double)seek_hint / 10000000.0,
-                              (double)dur / 10000000.0);
+                              s_vp.local_calib_bpt > 0.0
+                                  ? s_vp.local_calib_bpt
+                                  : (dur > 0 ? (double)file_size / (double)dur : 0.0),
+                              s_vp.local_calib_bpt > 0.0 ? 1 : 0);
+                } else {
+                    seek_bytes = 0;
                 }
             }
+            /* Record session start for next-seek calibration */
+            __atomic_store_n(&s_vp.net_bytes_read, 0L, __ATOMIC_RELEASE);
+            s_vp.net_start_bytes = seek_bytes;
             /* Stream PTS already reflects the actual file position; zero out
              * seek_offset_ticks so the decode thread doesn't double-add it. */
             s_vp.seek_offset_ticks = 0;
@@ -342,6 +360,7 @@ static void net_thread_func(void *arg)
         size_t n;
         while (!s_vp.stop_requested &&
                (n = fread(s_local_buf, 1, sizeof(s_local_buf), lf)) > 0) {
+            __atomic_fetch_add(&s_vp.net_bytes_read, (long)n, __ATOMIC_RELAXED);
             net_write_cb(s_local_buf, 1, n, &s_vp.demux);
         }
         fclose(lf);
@@ -970,6 +989,15 @@ bool video_player_play(const char *url, int64_t duration_ticks,
     log_write("PLAY: starting video, url_len=%d seek=%lld 3d=%d",
               (int)strlen(url), (long long)seek_offset_ticks, (int)mode_3d);
     video_player_stop();
+
+    /* Calibrate local seek using actual bytes-per-tick from the just-stopped session */
+    {
+        int64_t prev_pos = s_vp.position_ticks;
+        long prev_bytes = s_vp.net_start_bytes +
+                          (long)__atomic_load_n(&s_vp.net_bytes_read, __ATOMIC_ACQUIRE);
+        if (prev_pos > 0 && prev_bytes > 0)
+            s_vp.local_calib_bpt = (double)prev_bytes / (double)prev_pos;
+    }
 
     snprintf(s_vp.url, sizeof(s_vp.url), "%s", url);
     s_vp.duration_ticks = duration_ticks;
