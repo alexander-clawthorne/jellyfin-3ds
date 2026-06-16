@@ -755,8 +755,8 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                         dl_queue_audio(item->id, dl_name, aud_stream.url);
                     }
                 } else if (is_album) {
-                    /* Download all tracks in album */
-                    jfin_item_list_t album_tracks;
+                    /* Download all tracks in album (static: ~23KB, too large for stack) */
+                    static jfin_item_list_t album_tracks;
                     if (jfin_get_items(session, item->id, 0, JFIN_MAX_ITEMS, &album_tracks)) {
                         const char *album_artist = item->artist[0] ? item->artist : item->name;
                         for (int ai = 0; ai < album_tracks.count; ai++) {
