@@ -1397,6 +1397,12 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             }
         }
 
+        /* Y: jump to now playing (if something is playing) */
+        if ((kdown & KEY_Y) && state->has_now_playing) {
+            state->previous_view = state->current_view;
+            state->current_view = VIEW_NOW_PLAYING;
+        }
+
         /* B: save and return — go to libraries if logged in, login screen if not */
         if (kdown & KEY_B) {
             config_save(&g_config);
@@ -2244,7 +2250,6 @@ void ui_render_downloads(const ui_state_t *state)
             snprintf(prog, sizeof(prog), "%.1f MB downloaded", now/(1024.0f*1024.0f));
         }
         draw_text(10, 70, 0.38f, rgba(COLOR_TEXT_SECONDARY), prog);
-        draw_text(10, 228, 0.36f, rgba(COLOR_TEXT_SECONDARY), "Y: Cancel current download");
     } else if (vds == DL_DONE) {
         draw_text(10, 26, 0.42f, rgba(0x88FF88FF), "Last download complete");
     } else if (vds == DL_ERROR) {
