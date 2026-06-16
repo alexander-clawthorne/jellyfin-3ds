@@ -166,6 +166,32 @@ static void net_thread_func(void *arg)
 {
     (void)arg;
 
+    /* Local file (sdmc:/) — bypass curl, read directly into ring buffer */
+    if (strncmp(s_player.url, "sdmc:", 5) == 0) {
+        FILE *lf = fopen(s_player.url, "rb");
+        if (!lf) {
+            snprintf(s_player.error_msg, sizeof(s_player.error_msg), "Cannot open local audio");
+            s_player.state = PLAYER_ERROR;
+            __atomic_store_n(&s_player.ring.finished, true, __ATOMIC_RELEASE);
+            return;
+        }
+        static char s_audio_local_buf[32768];
+        size_t n;
+        while (!s_player.stop_requested &&
+               (n = fread(s_audio_local_buf, 1, sizeof(s_audio_local_buf), lf)) > 0) {
+            size_t written = 0;
+            while (written < n && !s_player.stop_requested) {
+                int w = ring_write(&s_player.ring, (const u8 *)s_audio_local_buf + written,
+                                   (int)(n - written));
+                written += (size_t)w;
+                if (written < n) svcSleepThread(1000000LL);
+            }
+        }
+        fclose(lf);
+        __atomic_store_n(&s_player.ring.finished, true, __ATOMIC_RELEASE);
+        return;
+    }
+
     CURL *curl = curl_easy_init();
     if (!curl) {
         snprintf(s_player.error_msg, sizeof(s_player.error_msg), "curl init failed");

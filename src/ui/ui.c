@@ -67,10 +67,66 @@ typedef struct {
     char path[192];   /* full path for deletion */
     size_t sz;        /* bytes */
     bool is_video;
+    int  dl_type;     /* 0=video, 1=cbz, 2=audio */
+    char series[64];  /* series/album name for sorting */
+    int  season_num;  /* season or volume number */
+    int  ep_num;      /* episode or chapter number */
 } dl_entry_t;
 
 static dl_entry_t s_dl_entries[MAX_DL_ENTRIES];
 static int        s_dl_count = 0;
+
+/* Parse "Series / Season N / E## - Title" or "Series / Volume N / Chapter M" into
+ * sort fields. Handles any " / "-delimited breadcrumb. */
+static void dl_parse_metadata(dl_entry_t *e)
+{
+    e->series[0] = '\0';
+    e->season_num = 0;
+    e->ep_num = 0;
+
+    char tmp[128];
+    strncpy(tmp, e->name, sizeof(tmp)-1);
+    tmp[sizeof(tmp)-1] = '\0';
+
+    char *p1 = strstr(tmp, " / ");
+    if (!p1) {
+        strncpy(e->series, tmp, sizeof(e->series)-1);
+        e->series[sizeof(e->series)-1] = '\0';
+        return;
+    }
+    *p1 = '\0';
+    strncpy(e->series, tmp, sizeof(e->series)-1);
+    e->series[sizeof(e->series)-1] = '\0';
+
+    char *p2 = strstr(p1 + 3, " / ");
+    if (p2) {
+        /* Season/Volume part */
+        char spart[32];
+        int slen = (int)(p2 - (p1 + 3));
+        if (slen > 31) slen = 31;
+        strncpy(spart, p1 + 3, slen);
+        spart[slen] = '\0';
+        const char *snum = spart;
+        while (*snum && (*snum < '0' || *snum > '9')) snum++;
+        e->season_num = (*snum) ? atoi(snum) : 0;
+        /* Episode/Chapter part */
+        const char *ep = p2 + 3;
+        if (*ep == 'E' || *ep == 'e') ep++;
+        else { while (*ep && (*ep < '0' || *ep > '9')) ep++; }
+        e->ep_num = (*ep) ? atoi(ep) : 0;
+    }
+}
+
+static int dl_entry_cmp(const void *a, const void *b)
+{
+    const dl_entry_t *ea = (const dl_entry_t *)a;
+    const dl_entry_t *eb = (const dl_entry_t *)b;
+    if (ea->dl_type != eb->dl_type) return ea->dl_type - eb->dl_type;
+    int sc = strcmp(ea->series, eb->series);
+    if (sc != 0) return sc;
+    if (ea->season_num != eb->season_num) return ea->season_num - eb->season_num;
+    return ea->ep_num - eb->ep_num;
+}
 
 static void dl_manager_scan(void)
 {
@@ -83,58 +139,51 @@ static void dl_manager_scan(void)
         const char *n = de->d_name;
         int nlen = (int)strlen(n);
 
-        bool is_cbz = (strncmp(n, "cbz_", 4) == 0 && nlen > 8 &&
-                       strcmp(n + nlen - 4, ".cbz") == 0);
-        bool is_vid = (strncmp(n, "video_", 6) == 0 && nlen > 9 &&
-                       strcmp(n + nlen - 3, ".ts") == 0);
-        if (!is_cbz && !is_vid) continue;
+        bool is_cbz   = (strncmp(n, "cbz_",   4) == 0 && nlen > 8  &&
+                         strcmp(n + nlen - 4, ".cbz") == 0);
+        bool is_vid   = (strncmp(n, "video_", 6) == 0 && nlen > 9  &&
+                         strcmp(n + nlen - 3, ".ts") == 0);
+        bool is_audio = (strncmp(n, "audio_", 6) == 0 && nlen > 10 &&
+                         strcmp(n + nlen - 4, ".mp3") == 0);
+        if (!is_cbz && !is_vid && !is_audio) continue;
 
         dl_entry_t *e = &s_dl_entries[s_dl_count++];
         e->is_video = is_vid;
+        e->dl_type  = is_vid ? 0 : (is_cbz ? 1 : 2);
 
         snprintf(e->path, sizeof(e->path), "%s/%s", VDL_DIR, n);
 
         struct stat st;
         e->sz = (stat(e->path, &st) == 0) ? (size_t)st.st_size : 0;
 
-        if (is_vid) {
-            /* Try companion title file */
-            char txt[192];
-            snprintf(txt, sizeof(txt), "%s/%.*s.txt", VDL_DIR, nlen - 3, n);
-            FILE *f = fopen(txt, "r");
-            if (f) {
-                if (fgets(e->name, sizeof(e->name), f)) {
-                    int l = (int)strlen(e->name);
-                    while (l > 0 && (e->name[l-1] == '\n' || e->name[l-1] == '\r'))
-                        e->name[--l] = '\0';
-                }
-                fclose(f);
-            } else {
-                /* Derive from filename: strip "video_" prefix and ".ts" suffix */
-                int id_len = nlen - 6 - 3;
-                snprintf(e->name, sizeof(e->name), "video %.*s",
-                         id_len > 20 ? 20 : id_len, n + 6);
+        /* Try companion title .txt (strip extension, append .txt) */
+        char txt[192];
+        int strip = is_vid ? 3 : 4; /* .ts=3, .cbz=.mp3=4 */
+        snprintf(txt, sizeof(txt), "%s/%.*s.txt", VDL_DIR, nlen - strip, n);
+        FILE *f = fopen(txt, "r");
+        if (f) {
+            if (fgets(e->name, sizeof(e->name), f)) {
+                int l = (int)strlen(e->name);
+                while (l > 0 && (e->name[l-1] == '\n' || e->name[l-1] == '\r'))
+                    e->name[--l] = '\0';
             }
+            fclose(f);
         } else {
-            /* CBZ: try companion .txt for human-readable name (breadcrumb) */
-            char txt[192];
-            snprintf(txt, sizeof(txt), "%s/%.*s.txt", VDL_DIR, nlen - 4, n);
-            FILE *f = fopen(txt, "r");
-            if (f) {
-                if (fgets(e->name, sizeof(e->name), f)) {
-                    int l = (int)strlen(e->name);
-                    while (l > 0 && (e->name[l-1] == '\n' || e->name[l-1] == '\r'))
-                        e->name[--l] = '\0';
-                }
-                fclose(f);
-            } else {
-                int id_len = nlen - 4 - 4;
-                snprintf(e->name, sizeof(e->name), "book %.*s",
-                         id_len > 20 ? 20 : id_len, n + 4);
-            }
+            /* Fallback: derive from filename */
+            int prefix = is_vid ? 6 : 4; /* "video_"=6, "cbz_"=4, "audio_"=6 */
+            if (is_audio) prefix = 6;
+            int id_len = nlen - prefix - strip;
+            const char *label = is_vid ? "video" : (is_cbz ? "book" : "audio");
+            snprintf(e->name, sizeof(e->name), "%s %.*s", label,
+                     id_len > 20 ? 20 : id_len, n + prefix);
         }
+
+        dl_parse_metadata(e);
     }
     closedir(d);
+
+    if (s_dl_count > 1)
+        qsort(s_dl_entries, s_dl_count, sizeof(dl_entry_t), dl_entry_cmp);
 }
 
 static void dl_manager_delete(int idx)
@@ -607,13 +656,15 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 }
             }
         }
-        /* X: download video/book. ZL+X: download video with first available subtitle. */
+        /* X: download video/book/audio. ZL+X: download video with first available subtitle. */
         if (kdown & KEY_X) {
             if (state->selected_index < state->items.count) {
                 jfin_item_t *item = &state->items.items[state->selected_index];
                 bool is_video = (item->type == JFIN_ITEM_MOVIE ||
                                  item->type == JFIN_ITEM_EPISODE);
                 bool is_book  = (item->type == JFIN_ITEM_BOOK);
+                bool is_audio = (item->type == JFIN_ITEM_AUDIO);
+                bool is_album = (item->type == JFIN_ITEM_MUSIC_ALBUM);
                 if (is_video) {
                     jfin_stream_t stream;
                     bool want_first_sub = (kheld & KEY_ZL) != 0;
@@ -691,6 +742,35 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     snprintf(dl_url, sizeof(dl_url), "%s/Items/%s/Download?api_key=%s",
                              session->server_url, item->id, session->access_token);
                     dl_queue_book(item->id, book_name, dl_url);
+                } else if (is_audio) {
+                    /* Download single audio track as MP3 */
+                    jfin_stream_t aud_stream;
+                    if (jfin_get_audio_stream(session, item->id, 0, &aud_stream)) {
+                        char dl_name[256];
+                        if (item->artist[0] && item->album[0])
+                            snprintf(dl_name, sizeof(dl_name), "%s / %s / %s",
+                                     item->artist, item->album, item->name);
+                        else
+                            snprintf(dl_name, sizeof(dl_name), "%s", item->name);
+                        dl_queue_audio(item->id, dl_name, aud_stream.url);
+                    }
+                } else if (is_album) {
+                    /* Download all tracks in album */
+                    jfin_item_list_t album_tracks;
+                    if (jfin_get_items(session, item->id, 0, JFIN_MAX_ITEMS, &album_tracks)) {
+                        const char *album_artist = item->artist[0] ? item->artist : item->name;
+                        for (int ai = 0; ai < album_tracks.count; ai++) {
+                            jfin_item_t *track = &album_tracks.items[ai];
+                            if (track->type != JFIN_ITEM_AUDIO) continue;
+                            jfin_stream_t aud_stream;
+                            if (jfin_get_audio_stream(session, track->id, 0, &aud_stream)) {
+                                char dl_name[256];
+                                snprintf(dl_name, sizeof(dl_name), "%s / %s / %s",
+                                         album_artist, item->name, track->name);
+                                dl_queue_audio(track->id, dl_name, aud_stream.url);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -918,8 +998,8 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                         audio_player_play(stream.url, state->now_playing.runtime_ticks, new_pos);
                 }
             }
-            /* Y to cycle subtitle tracks */
-            if ((kdown & KEY_Y) && vid_active && !state->now_playing_offline) {
+            /* SELECT to cycle subtitle tracks (video), or repeat (audio) */
+            if ((kdown & KEY_SELECT) && vid_active && !state->now_playing_offline) {
                 if (!state->subtitle_list_loaded) {
                     if (jfin_get_subtitle_streams(session, state->now_playing.id,
                                                   &state->subtitle_list))
@@ -969,10 +1049,10 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     video_player_play(sub_stream.url, state->now_playing.runtime_ticks,
                                       resume_ticks, sub_mode);
             }
-            /* Y: toggle shuffle (audio only — video uses Y for subtitles) */
-            if ((kdown & KEY_Y) && !vid_active)
+            /* Y: toggle shuffle (both audio and video playlists) */
+            if (kdown & KEY_Y)
                 state->shuffle_mode = !state->shuffle_mode;
-            /* SELECT: cycle repeat mode 0→1→2→0 (audio only) */
+            /* SELECT: cycle subtitle tracks (video) / repeat mode 0→1→2 (audio) */
             if ((kdown & KEY_SELECT) && !vid_active)
                 state->repeat_mode = (state->repeat_mode + 1) % 3;
             /* B to go back to browse */
@@ -1289,7 +1369,18 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
         if (kdown & KEY_A && state->downloads_index < dl_manager_count()) {
             const dl_entry_t *e = dl_manager_get(state->downloads_index);
             if (e) {
-                if (!e->is_video) {
+                if (e->dl_type == 2) {
+                    /* Audio download: play via audio player (local MP3) */
+                    video_player_stop();
+                    audio_player_stop();
+                    audio_player_play(e->path, 0, 0);
+                    strncpy(state->now_playing.name, e->name, sizeof(state->now_playing.name)-1);
+                    state->now_playing.name[sizeof(state->now_playing.name)-1] = '\0';
+                    state->has_now_playing = true;
+                    state->now_playing_offline = true;
+                    state->previous_view = state->current_view;
+                    state->current_view  = VIEW_NOW_PLAYING;
+                } else if (!e->is_video) {
                     strncpy(state->now_playing.name, e->name, sizeof(state->now_playing.name)-1);
                     state->now_playing.name[sizeof(state->now_playing.name)-1] = '\0';
                     state->reader_page    = 0;
@@ -1552,7 +1643,9 @@ void ui_render_browse(const ui_state_t *state)
         bool sel_dl = false;
         if (state->selected_index < state->items.count) {
             jfin_item_type_t t = state->items.items[state->selected_index].type;
-            sel_dl = (t == JFIN_ITEM_MOVIE || t == JFIN_ITEM_EPISODE || t == JFIN_ITEM_BOOK);
+            sel_dl = (t == JFIN_ITEM_MOVIE || t == JFIN_ITEM_EPISODE ||
+                      t == JFIN_ITEM_BOOK  || t == JFIN_ITEM_AUDIO   ||
+                      t == JFIN_ITEM_MUSIC_ALBUM);
         }
         bool paginating = (state->items.total_count > JFIN_MAX_ITEMS);
         if (paginating && sel_dl)
@@ -1761,9 +1854,9 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     if (!is_video)
         ctl_hint = "A:Pause X:Stop B:Back  Y:Shuffle  SEL:Repeat";
     else if (state->now_playing_offline)
-        ctl_hint = "A:Pause X:Stop B:Back L/R:Restart";
+        ctl_hint = "A:Pause X:Stop B:Back L/R:Seek Y:Shuffle";
     else
-        ctl_hint = "A:Pause X:Stop B:Back L/R:Seek Y:Subs";
+        ctl_hint = "A:Pause X:Stop B:Back L/R:Seek Y:Shuf SEL:Subs";
     draw_text(10, 180, 0.4f, rgba(COLOR_TEXT_PRIMARY), ctl_hint);
 }
 
@@ -2075,6 +2168,14 @@ void ui_render_downloads(const ui_state_t *state)
         float y = 30 + i * UI_LIST_ITEM_HEIGHT;
         bool sel = (idx == state->downloads_index);
 
+        /* Draw thin separator at the start of a new type/series group */
+        if (idx > 0) {
+            bool new_type   = s_dl_entries[idx].dl_type != s_dl_entries[idx-1].dl_type;
+            bool new_series = strcmp(s_dl_entries[idx].series, s_dl_entries[idx-1].series) != 0;
+            if (new_type || new_series)
+                draw_rect(14, (int)y, 288, 1, rgba(COLOR_ACCENT));
+        }
+
         draw_list_item_bg(y, 306, UI_LIST_ITEM_HEIGHT - 4, sel);
 
         /* For selected item: scroll name if offset > 0 or name is long */
@@ -2099,7 +2200,8 @@ void ui_render_downloads(const ui_state_t *state)
         else
             snprintf(size_str, sizeof(size_str), "%zuKB", s_dl_entries[idx].sz / 1024);
 
-        const char *type = s_dl_entries[idx].is_video ? "VID" : "CBZ";
+        const char *type = s_dl_entries[idx].dl_type == 0 ? "VID"
+                         : s_dl_entries[idx].dl_type == 2 ? "AUD" : "CBZ";
         char meta[32];
         snprintf(meta, sizeof(meta), "%s %s", type, size_str);
         draw_text(218, y + 4, 0.4f, rgba(COLOR_TEXT_SECONDARY), meta);
