@@ -130,8 +130,9 @@ int main(int argc, char *argv[])
         touchPosition touch;
         hidTouchRead(&touch);
 
-        /* Exit on START (in reader, START toggles split mode instead) */
-        if ((kdown & KEY_START) && s_ui.current_view != VIEW_READER)
+        /* Exit on START (reader: split toggle; now-playing: stop media) */
+        if ((kdown & KEY_START) && s_ui.current_view != VIEW_READER &&
+                s_ui.current_view != VIEW_NOW_PLAYING)
             break;
 
         /* Update */
