@@ -725,7 +725,8 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                         snprintf(dl_name, sizeof(dl_name), "%s", item->name);
                     }
                     if (jfin_get_video_stream(session, item->id, 0, false, dl_sub_idx, &stream))
-                        dl_queue_video(item->id, dl_name, stream.url, dl_sub_lang);
+                        dl_queue_video(item->id, dl_name, stream.url, dl_sub_lang,
+                                       item->runtime_ticks);
                 } else if (is_book) {
                     /* Build breadcrumb display name for the book */
                     char book_name[256];
@@ -1160,7 +1161,8 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     snprintf(xname, sizeof(xname), "%s / E%02d - %s",         \
                              cand->series_name, cand->index_number, cand->name); \
                 else snprintf(xname, sizeof(xname), "%s", cand->name);        \
-                dl_queue_video(cand->id, xname, xstream.url, _eff_sub_name);  \
+                dl_queue_video(cand->id, xname, xstream.url, _eff_sub_name,   \
+                               cand->runtime_ticks);                           \
                 if (cand->index_number > 0)                                    \
                     snprintf(state->np_toast, sizeof(state->np_toast),         \
                              got_sub ? "DL+sub: E%02d - %s"                    \
@@ -2430,7 +2432,7 @@ void ui_render_downloads(const ui_state_t *state)
             bool qsel = state->downloads_queue_focus && (slot == state->downloads_queue_index);
             char ql[72];
             snprintf(ql, sizeof(ql), "%s%d. %.50s",
-                     qsel ? "> " : "  ", slot + 2, dl_queue_item_name(qi));
+                     qsel ? "> " : "  ", slot + 1, dl_queue_item_name(qi));
             draw_text(10, qy, 0.38f,
                       qsel ? rgba(COLOR_TEXT_PRIMARY) : rgba(COLOR_TEXT_SECONDARY), ql);
             qy += 15;
@@ -2503,7 +2505,11 @@ void ui_render_downloads(const ui_state_t *state)
             snprintf(disp, sizeof(disp), "%.36s%s", full_name, nlen > 36 ? ">" : "");
         }
 
-        draw_text(14, y + 4, 0.45f, rgba(COLOR_TEXT_PRIMARY), disp);
+        /* Type-based accent color: VID=blue, AUD=purple, CBZ=red */
+        u32 type_col = (s_dl_entries[idx].dl_type == 0) ? 0x5599FFFF   /* VID blue   */
+                     : (s_dl_entries[idx].dl_type == 2) ? 0xBB66EEFF   /* AUD purple */
+                     :                                    0xFF7777FF;   /* CBZ red    */
+        draw_text(14, y + 4, 0.45f, rgba(type_col), disp);
 
         char size_str[20];
         float sz_mb = s_dl_entries[idx].sz / (1024.0f * 1024.0f);
@@ -2516,7 +2522,7 @@ void ui_render_downloads(const ui_state_t *state)
                          : s_dl_entries[idx].dl_type == 2 ? "AUD" : "CBZ";
         char meta[32];
         snprintf(meta, sizeof(meta), "%s %s", type, size_str);
-        draw_text(218, y + 4, 0.4f, rgba(COLOR_TEXT_SECONDARY), meta);
+        draw_text(218, y + 4, 0.4f, rgba(type_col), meta);
     }
 
     draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),

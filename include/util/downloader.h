@@ -29,9 +29,12 @@ typedef enum {
     DL_ERROR,
 } dl_state_t;
 
-/* Queue a video download. Returns true if added, false if queue full. */
+/* Queue a video download. Returns true if added, false if queue full.
+ * runtime_ticks: item duration in 100ns ticks (used to estimate download
+ * size when the server omits Content-Length). Pass 0 if unknown. */
 bool dl_queue_video(const char *item_id, const char *item_name,
-                    const char *url, const char *sub_track_name);
+                    const char *url, const char *sub_track_name,
+                    int64_t runtime_ticks);
 
 /* Queue a book/CBZ download. url must include api_key.
  * Skips download if the file already exists (reader cache hit). */

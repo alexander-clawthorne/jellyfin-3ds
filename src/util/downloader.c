@@ -24,6 +24,7 @@ static struct {
     volatile int    state;      /* dl_state_t */
     volatile size_t bytes;
     volatile size_t total;
+    volatile size_t estimated_total; /* computed from bitrate×duration when Content-Length absent */
     volatile bool   cancel;
 
     char save_path[192];        /* sdmc:/.../video_ITEMID.ts or cbz_ITEMID.cbz */
@@ -31,7 +32,8 @@ static struct {
     char url[2048];
     char item_name[256];
     char sub_name[128];         /* subtitle track name being burned in */
-    bool is_video;              /* false = book/CBZ download */
+    bool is_video;
+    int64_t runtime_ticks;      /* item duration for size estimation */
 } s_vdl;
 
 /* ── Download queue ─────────────────────────────────────────────────── */
@@ -39,13 +41,14 @@ static struct {
 #define DL_QUEUE_MAX 10
 
 typedef struct {
-    char item_id[64];
-    char item_name[256];
-    char url[2048];
-    char save_path[192];
-    char meta_path[192];
-    char sub_name[128];
-    bool is_video;
+    char    item_id[64];
+    char    item_name[256];
+    char    url[2048];
+    char    save_path[192];
+    char    meta_path[192];
+    char    sub_name[128];
+    bool    is_video;
+    int64_t runtime_ticks;
 } dl_q_item_t;
 
 static dl_q_item_t s_queue[DL_QUEUE_MAX];
@@ -158,7 +161,8 @@ static void join_thread(void)
 /* ── Public API ─────────────────────────────────────────────────────── */
 
 bool dl_queue_video(const char *item_id, const char *item_name,
-                    const char *url, const char *sub_track_name)
+                    const char *url, const char *sub_track_name,
+                    int64_t runtime_ticks)
 {
     if (s_q_count >= DL_QUEUE_MAX) return false;
     dl_q_item_t *q = &s_queue[s_q_count++];
@@ -172,8 +176,8 @@ bool dl_queue_video(const char *item_id, const char *item_name,
     snprintf(q->meta_path, sizeof(q->meta_path), VDL_DIR "/video_%s.txt", item_id);
     strncpy(q->item_id, item_id, sizeof(q->item_id)-1);
     q->item_id[sizeof(q->item_id)-1] = '\0';
-    q->is_video = true;
-    /* If idle, start immediately */
+    q->is_video       = true;
+    q->runtime_ticks  = runtime_ticks;
     if (s_vdl.state == DL_IDLE) dl_process_queue();
     return true;
 }
@@ -235,15 +239,32 @@ void dl_process_queue(void)
     s_vdl.meta_path[sizeof(s_vdl.meta_path)-1] = '\0';
     strncpy(s_vdl.sub_name, q->sub_name, sizeof(s_vdl.sub_name)-1);
     s_vdl.sub_name[sizeof(s_vdl.sub_name)-1] = '\0';
-    s_vdl.is_video = q->is_video;
+    s_vdl.is_video      = q->is_video;
+    s_vdl.runtime_ticks = q->runtime_ticks;
+
+    /* Estimate total bytes from URL bitrate params × duration.
+     * Jellyfin transcoded streams omit Content-Length; this gives a
+     * reasonable progress bar even before any data arrives. */
+    size_t est = 0;
+    if (q->runtime_ticks > 0) {
+        const char *vp = strstr(s_vdl.url, "VideoBitRate=");
+        const char *ap = strstr(s_vdl.url, "AudioBitRate=");
+        long vbr = vp ? strtol(vp + 13, NULL, 10) : 0;
+        long abr = ap ? strtol(ap + 13, NULL, 10) : 0;
+        if (vbr + abr > 0) {
+            long dur_s = (long)(q->runtime_ticks / 10000000LL);
+            est = (size_t)((vbr + abr) / 8 * dur_s);
+        }
+    }
 
     /* Shift queue */
     s_q_count--;
     for (int i = 0; i < s_q_count; i++) s_queue[i] = s_queue[i+1];
 
-    s_vdl.bytes  = 0;
-    s_vdl.total  = 0;
-    s_vdl.cancel = false;
+    s_vdl.bytes           = 0;
+    s_vdl.total           = 0;
+    s_vdl.estimated_total = est;
+    s_vdl.cancel          = false;
     s_vdl.state  = DL_ACTIVE;
     s_vdl.thread = threadCreate(vdl_thread_func, NULL, VDL_STACK, VDL_PRIORITY, -2, false);
     if (!s_vdl.thread) {
@@ -288,6 +309,6 @@ void dl_cleanup(void)
 
 dl_state_t  dl_get_state(void)  { return (dl_state_t)s_vdl.state; }
 size_t      dl_bytes(void)       { return s_vdl.bytes; }
-size_t      dl_total(void)       { return s_vdl.total; }
+size_t      dl_total(void)       { return s_vdl.total > 0 ? s_vdl.total : s_vdl.estimated_total; }
 const char *dl_item_name(void)   { return s_vdl.item_name; }
 const char *dl_sub_name(void)    { return s_vdl.sub_name; }
