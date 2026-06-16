@@ -57,6 +57,7 @@ typedef struct {
     jfin_item_type_t type;
     int  year;
     int  index_number;               /* track/episode number */
+    int  season_number;              /* season number (ParentIndexNumber for episodes) */
     char album_id[JFIN_MAX_ID];      /* for album art fallback on audio tracks */
     int64_t runtime_ticks;           /* duration in 10M ticks */
     bool has_primary_image;
