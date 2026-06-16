@@ -1104,7 +1104,11 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             if (jfin_get_video_stream(session, cand->id, 0,                    \
                                       xmode != VP_3D_NONE, sub_idx, &xstream)) { \
                 char xname[256];                                               \
-                if (cand->series_name[0])                                      \
+                if (cand->series_name[0] && cand->season_number > 0)           \
+                    snprintf(xname, sizeof(xname), "%s / Season %d / E%02d - %s", \
+                             cand->series_name, cand->season_number,           \
+                             cand->index_number, cand->name);                  \
+                else if (cand->series_name[0])                                 \
                     snprintf(xname, sizeof(xname), "%s / E%02d - %s",         \
                              cand->series_name, cand->index_number, cand->name); \
                 else snprintf(xname, sizeof(xname), "%s", cand->name);        \

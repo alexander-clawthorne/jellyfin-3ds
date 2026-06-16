@@ -255,7 +255,8 @@ static void parse_item(const cJSON *obj, jfin_item_t *item)
     json_get_string(obj, "SeriesName", item->series_name, sizeof(item->series_name));
     json_get_string(obj, "ParentId", item->parent_id, sizeof(item->parent_id));
     item->year = json_get_int(obj, "ProductionYear", 0);
-    item->index_number = json_get_int(obj, "IndexNumber", 0);
+    item->index_number  = json_get_int(obj, "IndexNumber", 0);
+    item->season_number = json_get_int(obj, "ParentIndexNumber", 0);
     item->runtime_ticks = json_get_int64(obj, "RunTimeTicks", 0);
     item->page_count    = json_get_int(obj, "ChildCount", 0);
 
