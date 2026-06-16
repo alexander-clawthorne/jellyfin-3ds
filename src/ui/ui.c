@@ -998,8 +998,8 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                         audio_player_play(stream.url, state->now_playing.runtime_ticks, new_pos);
                 }
             }
-            /* SELECT to cycle subtitle tracks (video), or repeat (audio) */
-            if ((kdown & KEY_SELECT) && vid_active && !state->now_playing_offline) {
+            /* X to cycle subtitle tracks (video online), or skip to next track (audio) */
+            if ((kdown & KEY_X) && vid_active && !state->now_playing_offline) {
                 if (!state->subtitle_list_loaded) {
                     if (jfin_get_subtitle_streams(session, state->now_playing.id,
                                                   &state->subtitle_list))
@@ -1052,16 +1052,19 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             /* Y: toggle shuffle (both audio and video playlists) */
             if (kdown & KEY_Y)
                 state->shuffle_mode = !state->shuffle_mode;
-            /* SELECT: cycle subtitle tracks (video) / repeat mode 0→1→2 (audio) */
+            /* SELECT: repeat mode 0→1→2 (audio only) */
             if ((kdown & KEY_SELECT) && !vid_active)
                 state->repeat_mode = (state->repeat_mode + 1) % 3;
-            /* B to go back to browse */
+            /* X (audio): stop so auto-advance picks up next track */
+            if ((kdown & KEY_X) && !vid_active)
+                audio_player_stop();
+            /* B: back to browse, keep playing */
             if (kdown & KEY_B) {
                 state->bottom_hidden = false;
                 state->current_view = state->previous_view;
             }
-            /* X to stop */
-            if (kdown & KEY_X) {
+            /* START: stop media and exit now-playing */
+            if (kdown & KEY_START) {
                 state->bottom_hidden = false;
                 video_player_stop();
                 audio_player_stop();
@@ -1331,37 +1334,67 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 state->downloads_queue_index = qcnt > 0 ? qcnt - 1 : 0;
         }
 
-        /* ── D-pad: downloaded file list (bottom screen) ────────────── */
-        if (kdown & KEY_DUP) {
-            state->downloads_queue_focus = false;
-            if (state->downloads_index > 0) {
-                state->downloads_index--;
-                state->downloads_name_offset = 0;
-                if (state->downloads_index < state->downloads_scroll)
-                    state->downloads_scroll = state->downloads_index;
+        /* ── D-pad: downloaded file list — hold to repeat ───────────── */
+        {
+            static int dl_rep_frames = 0;
+
+            bool nav_up    = (kdown & KEY_DUP)    != 0;
+            bool nav_down  = (kdown & KEY_DDOWN)  != 0;
+            bool nav_left  = (kdown & KEY_DLEFT)  != 0;
+            bool nav_right = (kdown & KEY_DRIGHT) != 0;
+
+            u32 any_fresh = kdown & (KEY_DUP | KEY_DDOWN | KEY_DLEFT | KEY_DRIGHT);
+            u32 any_held  = kheld & (KEY_DUP | KEY_DDOWN | KEY_DLEFT | KEY_DRIGHT);
+
+            if (any_fresh) {
+                dl_rep_frames = 0;
+            } else if (any_held) {
+                dl_rep_frames++;
+                if (dl_rep_frames >= 8) {
+                    if (dl_rep_frames % 2 == 0) {
+                        nav_up   = (kheld & KEY_DUP)   != 0;
+                        nav_down = (kheld & KEY_DDOWN)  != 0;
+                    }
+                    if (dl_rep_frames % 3 == 0) {
+                        nav_left  = (kheld & KEY_DLEFT)  != 0;
+                        nav_right = (kheld & KEY_DRIGHT) != 0;
+                    }
+                }
+            } else {
+                dl_rep_frames = 0;
             }
-        }
-        if (kdown & KEY_DDOWN) {
-            state->downloads_queue_focus = false;
-            if (state->downloads_index < dl_manager_count() - 1) {
-                state->downloads_index++;
-                state->downloads_name_offset = 0;
-                if (state->downloads_index >= state->downloads_scroll + UI_MAX_VISIBLE_ITEMS)
-                    state->downloads_scroll = state->downloads_index - UI_MAX_VISIBLE_ITEMS + 1;
+
+            if (nav_up) {
+                state->downloads_queue_focus = false;
+                if (state->downloads_index > 0) {
+                    state->downloads_index--;
+                    state->downloads_name_offset = 0;
+                    if (state->downloads_index < state->downloads_scroll)
+                        state->downloads_scroll = state->downloads_index;
+                }
             }
-        }
-        if (kdown & KEY_DLEFT) {
-            state->downloads_queue_focus = false;
-            if (state->downloads_name_offset > 0)
-                state->downloads_name_offset--;
-        }
-        if (kdown & KEY_DRIGHT) {
-            state->downloads_queue_focus = false;
-            int sel = state->downloads_index;
-            if (sel < dl_manager_count()) {
-                int nlen = (int)strlen(s_dl_entries[sel].name);
-                if (state->downloads_name_offset + 1 < nlen)
-                    state->downloads_name_offset++;
+            if (nav_down) {
+                state->downloads_queue_focus = false;
+                if (state->downloads_index < dl_manager_count() - 1) {
+                    state->downloads_index++;
+                    state->downloads_name_offset = 0;
+                    if (state->downloads_index >= state->downloads_scroll + UI_MAX_VISIBLE_ITEMS)
+                        state->downloads_scroll = state->downloads_index - UI_MAX_VISIBLE_ITEMS + 1;
+                }
+            }
+            if (nav_left) {
+                state->downloads_queue_focus = false;
+                if (state->downloads_name_offset > 0)
+                    state->downloads_name_offset--;
+            }
+            if (nav_right) {
+                state->downloads_queue_focus = false;
+                int sel = state->downloads_index;
+                if (sel < dl_manager_count()) {
+                    int nlen = (int)strlen(s_dl_entries[sel].name);
+                    if (state->downloads_name_offset + 1 < nlen)
+                        state->downloads_name_offset++;
+                }
             }
         }
 
@@ -1852,11 +1885,11 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     /* Controls hint */
     const char *ctl_hint;
     if (!is_video)
-        ctl_hint = "A:Pause X:Stop B:Back  Y:Shuffle  SEL:Repeat";
+        ctl_hint = "A:Pause B:Back STR:Stop  X:Skip Y:Shuf SEL:Rep";
     else if (state->now_playing_offline)
-        ctl_hint = "A:Pause X:Stop B:Back L/R:Seek Y:Shuffle";
+        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek Y:Shuffle";
     else
-        ctl_hint = "A:Pause X:Stop B:Back L/R:Seek Y:Shuf SEL:Subs";
+        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek X:Subs Y:Shuf";
     draw_text(10, 180, 0.4f, rgba(COLOR_TEXT_PRIMARY), ctl_hint);
 }
 
