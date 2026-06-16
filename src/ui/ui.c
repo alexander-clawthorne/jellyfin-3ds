@@ -998,8 +998,8 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                         audio_player_play(stream.url, state->now_playing.runtime_ticks, new_pos);
                 }
             }
-            /* X to cycle subtitle tracks (video online), or skip to next track (audio) */
-            if ((kdown & KEY_X) && vid_active && !state->now_playing_offline) {
+            /* Y (video online): cycle subtitle tracks */
+            if ((kdown & KEY_Y) && vid_active && !state->now_playing_offline) {
                 if (!state->subtitle_list_loaded) {
                     if (jfin_get_subtitle_streams(session, state->now_playing.id,
                                                   &state->subtitle_list))
@@ -1049,15 +1049,34 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     video_player_play(sub_stream.url, state->now_playing.runtime_ticks,
                                       resume_ticks, sub_mode);
             }
-            /* Y: toggle shuffle (both audio and video playlists) */
-            if (kdown & KEY_Y)
+            /* Y (audio): toggle shuffle */
+            if ((kdown & KEY_Y) && !vid_active)
                 state->shuffle_mode = !state->shuffle_mode;
             /* SELECT: repeat mode 0→1→2 (audio only) */
             if ((kdown & KEY_SELECT) && !vid_active)
                 state->repeat_mode = (state->repeat_mode + 1) % 3;
-            /* X (audio): stop so auto-advance picks up next track */
-            if ((kdown & KEY_X) && !vid_active)
-                audio_player_stop();
+            /* ZL/ZR (audio, New 3DS): previous / next track */
+            if (!vid_active && state->has_now_playing) {
+                int skip_dir = 0;
+                if (kdown & KEY_ZR) skip_dir = +1;
+                if (kdown & KEY_ZL) skip_dir = -1;
+                if (skip_dir != 0) {
+                    int target = state->playing_index + skip_dir;
+                    if (target >= 0 && target < state->items.count) {
+                        jfin_item_t *trk = &state->items.items[target];
+                        jfin_stream_t skip_stream;
+                        audio_player_stop();
+                        if (jfin_get_audio_stream(session, trk->id, 0, &skip_stream)) {
+                            audio_player_play(skip_stream.url, trk->runtime_ticks, 0);
+                            state->now_playing  = *trk;
+                            state->playing_index = target;
+                            state->auto_stopped  = false;
+                            jfin_report_start(session, trk->id);
+                            album_art_load(session, trk);
+                        }
+                    }
+                }
+            }
             /* B: back to browse, keep playing */
             if (kdown & KEY_B) {
                 state->bottom_hidden = false;
@@ -1885,11 +1904,11 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     /* Controls hint */
     const char *ctl_hint;
     if (!is_video)
-        ctl_hint = "A:Pause B:Back STR:Stop  X:Skip Y:Shuf SEL:Rep";
+        ctl_hint = "A:Pause B:Back STR:Stop ZL/ZR:Skip Y:Shuf SEL:Rep";
     else if (state->now_playing_offline)
-        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek Y:Shuffle";
+        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek";
     else
-        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek X:Subs Y:Shuf";
+        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek Y:Subs";
     draw_text(10, 180, 0.4f, rgba(COLOR_TEXT_PRIMARY), ctl_hint);
 }
 
