@@ -1077,51 +1077,70 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     }
                 }
             }
-            /* X (video): queue download of next undownloaded episode/item */
+            /* X / ZL+X (video): queue download of next undownloaded episode.
+             * ZL held = burn in current subtitle track (same as browse ZL+X). */
             if ((kdown & KEY_X) && state->has_now_playing &&
                     (vid_active || state->now_playing_local_path[0]) &&
                     session->authenticated) {
-                /* Online path: state->items already holds the season list */
+                bool with_subs = (kheld & KEY_ZL) != 0;
+                int  sub_idx   = with_subs ? state->subtitle_stream_index : -1;
+                const char *sub_name = (with_subs && state->subtitle_lang_pref[0])
+                                       ? state->subtitle_lang_pref : NULL;
+
+#define TRY_QUEUE_NEXT(list_ptr, count, start_i)                              \
+    do {                                                                       \
+        for (int _i = (start_i); _i < (count); _i++) {                        \
+            jfin_item_t *cand = &(list_ptr)[_i];                               \
+            if (cand->type != JFIN_ITEM_EPISODE &&                             \
+                cand->type != JFIN_ITEM_MOVIE) continue;                       \
+            char chk[208];                                                     \
+            snprintf(chk, sizeof(chk), VDL_DIR "/video_%s.ts", cand->id);     \
+            FILE *_cf = fopen(chk, "rb");                                      \
+            bool already = (_cf != NULL) || dl_queue_has_video(cand->id);      \
+            if (_cf) fclose(_cf);                                              \
+            if (already) continue;                                             \
+            jfin_stream_t xstream;                                             \
+            vp_3d_mode_t xmode = item_3d_mode(cand);                          \
+            if (jfin_get_video_stream(session, cand->id, 0,                    \
+                                      xmode != VP_3D_NONE, sub_idx, &xstream)) { \
+                char xname[256];                                               \
+                if (cand->series_name[0])                                      \
+                    snprintf(xname, sizeof(xname), "%s / E%02d - %s",         \
+                             cand->series_name, cand->index_number, cand->name); \
+                else snprintf(xname, sizeof(xname), "%s", cand->name);        \
+                dl_queue_video(cand->id, xname, xstream.url, sub_name);       \
+                if (cand->index_number > 0)                                    \
+                    snprintf(state->np_toast, sizeof(state->np_toast),         \
+                             with_subs ? "DL+sub: E%02d - %s"                  \
+                                       : "DL: E%02d - %s",                     \
+                             cand->index_number, cand->name);                  \
+                else snprintf(state->np_toast, sizeof(state->np_toast),        \
+                              with_subs ? "DL+sub: %s" : "DL: %s", cand->name);\
+                state->np_toast_timer = 150;                                   \
+            }                                                                  \
+            break;                                                             \
+        }                                                                      \
+    } while (0)
+
                 if (!state->now_playing_offline && state->playing_index >= 0) {
-                    for (int xi = state->playing_index + 1;
-                             xi < state->items.count; xi++) {
-                        jfin_item_t *cand = &state->items.items[xi];
-                        if (cand->type != JFIN_ITEM_EPISODE &&
-                            cand->type != JFIN_ITEM_MOVIE) continue;
-                        char chk[208];
-                        snprintf(chk, sizeof(chk), VDL_DIR "/video_%s.ts", cand->id);
-                        FILE *cf = fopen(chk, "rb");
-                        if (cf) { fclose(cf); continue; }
-                        jfin_stream_t xstream;
-                        vp_3d_mode_t xmode = item_3d_mode(cand);
-                        if (jfin_get_video_stream(session, cand->id, 0,
-                                                  xmode != VP_3D_NONE, -1, &xstream)) {
-                            char xname[256];
-                            if (cand->series_name[0])
-                                snprintf(xname, sizeof(xname), "%s / E%02d - %s",
-                                         cand->series_name, cand->index_number, cand->name);
-                            else
-                                snprintf(xname, sizeof(xname), "%s", cand->name);
-                            dl_queue_video(cand->id, xname, xstream.url, NULL);
-                        }
-                        break;
-                    }
+                    /* Online fast path: browse list already has the season */
+                    TRY_QUEUE_NEXT(state->items.items, state->items.count,
+                                   state->playing_index + 1);
                 } else {
-                    /* Offline path: look up parent from server, then fetch siblings */
+                    /* Offline path: resolve parent from server */
                     char xparent[JFIN_MAX_ID] = {0};
-                    if (state->now_playing.parent_id[0]) {
+                    if (state->now_playing.parent_id[0])
                         strncpy(xparent, state->now_playing.parent_id, sizeof(xparent)-1);
-                    } else if (state->now_playing.id[0]) {
+                    else if (state->now_playing.id[0])
                         jfin_get_item_parent_id(session, state->now_playing.id,
                                                 xparent, sizeof(xparent));
-                    }
                     if (xparent[0]) {
                         static jfin_item_list_t s_sibs;
                         if (jfin_get_siblings(session, xparent, JFIN_MAX_ITEMS, &s_sibs)) {
-                            /* Find our position by id, fall back to index_number */
                             int cur_pos = -1;
                             for (int si = 0; si < s_sibs.count; si++) {
-                                if (strcmp(s_sibs.items[si].id, state->now_playing.id) == 0)
+                                if (strcmp(s_sibs.items[si].id,
+                                           state->now_playing.id) == 0)
                                     { cur_pos = si; break; }
                             }
                             if (cur_pos < 0 && state->now_playing.index_number > 0) {
@@ -1131,33 +1150,12 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                                         { cur_pos = si; break; }
                                 }
                             }
-                            for (int si = (cur_pos >= 0 ? cur_pos + 1 : 0);
-                                     si < s_sibs.count; si++) {
-                                jfin_item_t *cand = &s_sibs.items[si];
-                                if (cand->type != JFIN_ITEM_EPISODE &&
-                                    cand->type != JFIN_ITEM_MOVIE) continue;
-                                char chk[208];
-                                snprintf(chk, sizeof(chk), VDL_DIR "/video_%s.ts", cand->id);
-                                FILE *cf = fopen(chk, "rb");
-                                if (cf) { fclose(cf); continue; }
-                                jfin_stream_t xstream;
-                                vp_3d_mode_t xmode = item_3d_mode(cand);
-                                if (jfin_get_video_stream(session, cand->id, 0,
-                                                          xmode != VP_3D_NONE, -1, &xstream)) {
-                                    char xname[256];
-                                    if (cand->series_name[0])
-                                        snprintf(xname, sizeof(xname), "%s / E%02d - %s",
-                                                 cand->series_name, cand->index_number,
-                                                 cand->name);
-                                    else
-                                        snprintf(xname, sizeof(xname), "%s", cand->name);
-                                    dl_queue_video(cand->id, xname, xstream.url, NULL);
-                                }
-                                break;
-                            }
+                            TRY_QUEUE_NEXT(s_sibs.items, s_sibs.count,
+                                           cur_pos >= 0 ? cur_pos + 1 : 0);
                         }
                     }
                 }
+#undef TRY_QUEUE_NEXT
             }
             /* B: back to browse, keep playing */
             if (kdown & KEY_B) {
@@ -1233,6 +1231,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 }
             }
         }
+        if (state->np_toast_timer > 0) state->np_toast_timer--;
         break;
 
     case VIEW_READER: {
@@ -1992,14 +1991,18 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
                   mode_str);
     }
 
+    /* Toast notification */
+    if (state->np_toast_timer > 0)
+        draw_text(10, 163, 0.42f, rgba(COLOR_ACCENT), state->np_toast);
+
     /* Controls hint */
     const char *ctl_hint;
     if (!is_video)
         ctl_hint = "A:Pause B:Back STR:Stop ZL/ZR:Skip Y:Shuf SEL:Rep";
     else if (state->now_playing_offline)
-        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek";
+        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek X:DLnext";
     else
-        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek Y:Subs";
+        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek Y:Subs X:DLnxt ZL+X:+sub";
     draw_text(10, 180, 0.4f, rgba(COLOR_TEXT_PRIMARY), ctl_hint);
 }
 

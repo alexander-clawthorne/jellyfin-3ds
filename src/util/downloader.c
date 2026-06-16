@@ -252,6 +252,19 @@ void dl_process_queue(void)
     }
 }
 
+bool dl_queue_has_video(const char *item_id)
+{
+    char expected[192];
+    snprintf(expected, sizeof(expected), VDL_DIR "/video_%s.ts", item_id);
+    if (s_vdl.state == DL_ACTIVE && strcmp(s_vdl.save_path, expected) == 0)
+        return true;
+    for (int i = 0; i < s_q_count; i++) {
+        if (strcmp(s_queue[i].save_path, expected) == 0)
+            return true;
+    }
+    return false;
+}
+
 int         dl_queue_count(void)              { return s_q_count; }
 const char *dl_queue_item_name(int idx)       { return (idx >= 0 && idx < s_q_count) ? s_queue[idx].item_name : ""; }
 void        dl_queue_remove(int idx)
