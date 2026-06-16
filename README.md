@@ -14,7 +14,9 @@ Native Jellyfin media client for Nintendo 3DS. Stream music and video, read mang
 - **Zoom and pan** — pinch-zoom equivalent via circle pad in reader
 - **Downloads** — queue video (with optional subtitle), audio, and CBZ files to SD card
 - **Download next** — press X while watching to queue the next undownloaded episode automatically
-- **Downloads manager** — browse (grouped by series/season), open, and delete downloaded files
+- **Download with subtitles** — press ZL+X while watching to queue the next episode with the active subtitle track burned in
+- **Download progress** — live speed, estimated file size, progress bar, and ETA on the downloads screen
+- **Downloads manager** — browse (grouped by series/season), open, and delete downloaded files; color-coded by type
 - **Library browsing** — navigate all Jellyfin libraries with pagination and search
 - **Auto-play** — next track or episode plays automatically; shuffle for music
 - **Session persistence** — login once, credentials saved to SD card
@@ -91,7 +93,7 @@ Items that have already been downloaded show a **[D]** badge.
 | Y | Cycle subtitle tracks |
 | X | Queue download of next undownloaded episode |
 | ZL + X | Queue next episode download with current subtitle burned in |
-| L / R | Seek −30 / +30 seconds |
+| L / R | Seek −15 / +30 seconds |
 | D-pad Down | Watch mode (hide controls) |
 | D-pad Up | Exit watch mode |
 
@@ -105,7 +107,7 @@ A brief toast notification ("DL: E04 - Episode Title") appears when a download i
 | B | Back to browse (keeps playing) |
 | START | Stop playback and exit |
 | X | Queue download of next undownloaded episode (requires internet) |
-| L / R | Seek ±30 seconds |
+| L / R | Seek −15 / +30 seconds |
 | D-pad Down | Watch mode |
 | D-pad Up | Exit watch mode |
 
@@ -149,11 +151,13 @@ Access from **Settings → Manage Downloads**.
 | D-pad Left/Right (hold) | Scroll long filename sideways |
 | Circle pad Up/Down | Navigate download queue (top screen) |
 | A | Open selected file (CBZ → reader, video/audio → player) |
-| X | Delete selected file / Remove from queue |
-| Y | Cancel the currently active download |
+| X | Delete selected file / Remove from queue / Cancel active download |
+| Y | Go to Now Playing |
 | B | Back to settings |
 
-Files are grouped by type (video, books, audio) then by series, season, and episode number.
+Files are grouped by type (video, books, audio) then by series, season, and episode number. Each file type is color-coded: video = blue, audio = purple, CBZ = red.
+
+The top screen shows the active download with a progress bar, file size, download speed, and estimated time remaining. The queue below it lists upcoming items numbered from 1.
 
 ### Settings
 
@@ -162,6 +166,7 @@ Files are grouped by type (video, books, audio) then by series, season, and epis
 | D-pad Up/Down | Move cursor |
 | D-pad Left/Right or L/R | Cycle values (bitrate, theme) |
 | A | Toggle / activate option |
+| Y | Go to Now Playing (if something is playing) |
 | B | Save and return to libraries |
 
 ---
@@ -179,9 +184,11 @@ Credentials are saved to `sdmc:/3ds/jellyfin-3ds/config.ini` and restored on nex
 ## Downloading Content
 
 ### Videos
-Press **X** on any movie or episode in the browse view. If a subtitle track is selected (via **Y**), it is burned into the video server-side — no separate subtitle file is needed. A `.txt` companion file with the item title is saved alongside the `.ts` video file.
+Press **X** on any movie or episode in the browse view, or **X** while watching to queue the next undownloaded episode. If a subtitle track is selected (via **Y**), it is burned into the video server-side — no separate subtitle file is needed. Press **ZL+X** while watching to queue the next episode with the current subtitle track automatically applied.
 
-Multiple downloads can be queued. The queue processes one item at a time and continues automatically. View queue status in **Settings → Manage Downloads**.
+A `.txt` companion file with the item title is saved alongside each `.ts` video file.
+
+Multiple downloads can be queued. The queue processes one item at a time and continues automatically. View queue status, speed, and progress in **Settings → Manage Downloads**.
 
 ### Manga / CBZ
 Press **X** on any book item. The CBZ archive downloads to SD and is cached — opening it again later skips the download entirely.

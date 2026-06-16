@@ -1787,7 +1787,7 @@ void ui_render_libraries(const ui_state_t *state)
     }
 
     draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
-              "A:Enter B:Back Y:Playing SEL:Settings");
+              "A:Enter B:Back Y:Now Playing SEL:Settings");
 }
 
 static bool item_has_download(const char *item_id, bool is_video)
@@ -2196,7 +2196,7 @@ void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
     if (state->has_now_playing) {
         draw_text(10, 213, 0.4f, rgba(COLOR_TEXT_SECONDARY),
                   "A:Toggle L/R:Change B:Back");
-        draw_text(10, 228, 0.38f, rgba(COLOR_ACCENT), "Y: Return to Now Playing");
+        draw_text(10, 228, 0.38f, rgba(COLOR_ACCENT), "Y:Now Playing");
     } else {
         draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
                   "A:Toggle L/R:Change B:Back");
@@ -2449,8 +2449,9 @@ void ui_render_downloads(const ui_state_t *state)
         draw_text(10, 225, 0.36f, rgba(COLOR_TEXT_SECONDARY),
                   "Circle:Nav  X:Cancel/Remove  B:Exit");
     else if (total_slots > 0)
-        draw_text(10, 225, 0.36f, rgba(COLOR_TEXT_SECONDARY),
-                  "Circle:Select  Y:NowPlay");
+        draw_text(10, 225, 0.36f,
+                  state->has_now_playing ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_SECONDARY),
+                  "Circle:Select  Y:Now Playing");
 
     C2D_TargetClear(s_bottom, bg_color());
     C2D_SceneBegin(s_bottom);
@@ -2528,7 +2529,7 @@ void ui_render_downloads(const ui_state_t *state)
     draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
               state->downloads_queue_focus
                   ? "A:Open  X:Cancel/Del  B:Exit queue"
-                  : "A:Open  X:Delete  Y:NowPlay  B:Back");
+                  : "A:Open  X:Delete  Y:Now Playing  B:Back");
 }
 
 /* ── Main render dispatch ──────────────────────────────────────────── */
