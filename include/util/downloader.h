@@ -41,6 +41,10 @@ bool dl_queue_book(const char *item_id, const char *display_name, const char *ur
  * Saves to: sdmc:/3ds/jellyfin-3ds/audio_ITEMID.mp3 */
 bool dl_queue_audio(const char *item_id, const char *display_name, const char *url);
 
+/* Returns true if item_id is already active or queued for video download.
+ * Used to skip items already in-flight when searching for the next to queue. */
+bool dl_queue_has_video(const char *item_id);
+
 /* Start the next queued item if the downloader is idle. Call from main loop. */
 void dl_process_queue(void);
 

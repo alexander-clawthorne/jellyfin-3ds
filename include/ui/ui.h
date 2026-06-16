@@ -124,6 +124,10 @@ typedef struct {
     bool  shuffle_mode;  /* pick random next track on auto-advance */
     int   repeat_mode;   /* 0=off  1=repeat-one  2=repeat-all */
 
+    /* Temporary toast notification (shown for a few seconds) */
+    char                 np_toast[128];
+    int                  np_toast_timer;  /* frames remaining; 0 = hidden */
+
     /* Downloads manager */
     int                  downloads_scroll;
     int                  downloads_index;

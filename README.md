@@ -6,16 +6,17 @@ Native Jellyfin media client for Nintendo 3DS. Stream music and video, read mang
 
 ## Features
 
-- **Music streaming** — browse artists, albums, tracks; MP3/AAC with album art
+- **Music streaming** — browse artists, albums, tracks; MP3/AAC with album art; ZL/ZR track skip
 - **Video streaming** — H.264 hardware decode at 24fps on New 3DS (400×224)
-- **Subtitles** — select any subtitle track; burned in server-side (no font rendering needed)
+- **Subtitles** — select any subtitle track; burned in server-side; sticky across episodes
 - **Manga / CBZ reader** — download and read CBZ archives page by page
 - **Split-screen reader** — page spans both screens simultaneously (480px combined height)
 - **Zoom and pan** — pinch-zoom equivalent via circle pad in reader
-- **Downloads** — queue video (with subtitle track) and CBZ files to SD card
-- **Downloads manager** — browse, open, and delete downloaded files
+- **Downloads** — queue video (with optional subtitle), audio, and CBZ files to SD card
+- **Download next** — press X while watching to queue the next undownloaded episode automatically
+- **Downloads manager** — browse (grouped by series/season), open, and delete downloaded files
 - **Library browsing** — navigate all Jellyfin libraries with pagination and search
-- **Auto-play** — next track or episode plays automatically
+- **Auto-play** — next track or episode plays automatically; shuffle for music
 - **Session persistence** — login once, credentials saved to SD card
 - **Background theme** — Dark / Black / White / Grey selectable in settings
 
@@ -38,7 +39,7 @@ Downloaded files are saved to `sdmc:/3ds/jellyfin-3ds/`.
 
 ## Controls
 
-Controls change based on the current screen.
+Controls change based on the current screen. **START exits the app from every screen except Now Playing and the Manga Reader.**
 
 ### Login
 
@@ -52,46 +53,63 @@ Controls change based on the current screen.
 
 | Button | Action |
 |--------|--------|
-| D-pad Up/Down | Move cursor |
+| D-pad Up/Down (hold) | Move cursor / continuous scroll |
 | A | Enter folder / Play media |
 | B | Go back |
-| X | Download item to SD card (video or CBZ) |
-| Y | Select subtitle track for next playback or download |
+| X | Download item to SD card (video, audio, CBZ, or whole album) |
+| ZL + X | Download video with subtitle burned in |
+| Y | Select subtitle track for next video playback or download |
 | L / R | Previous / next page |
-| SELECT | Search across all libraries |
+| SELECT | Search across all libraries (Browse) / Settings (Libraries) |
 | Touch | Tap to select, drag to scroll |
 | START | Exit app |
 
 Items that have already been downloaded show a **[D]** badge.
-
-When you press X to download a video, the currently selected subtitle track is burned in. A download queue allows multiple items to be queued at once.
 
 ### Now Playing — Audio
 
 | Button | Action |
 |--------|--------|
 | A | Pause / Resume |
-| X | Stop |
-| B | Back to browse |
+| B | Back to browse (keeps playing) |
+| START | Stop playback and exit |
+| Y | Toggle shuffle |
+| SELECT | Cycle repeat (Off → Repeat One → Repeat All) |
+| ZL | Previous track (New 3DS only) |
+| ZR | Next track (New 3DS only) |
 | L / R | Seek −30 / +30 seconds |
 | D-pad Down | Watch mode (hide bottom screen) |
-| D-pad Up | Show bottom screen |
-| START | Exit app |
+| D-pad Up | Exit watch mode |
 
-### Now Playing — Video
+### Now Playing — Video (online)
 
 | Button | Action |
 |--------|--------|
 | A | Pause / Resume |
-| X | Stop |
-| B | Back to browse |
+| B | Back to browse (keeps playing) |
+| START | Stop playback and exit |
+| Y | Cycle subtitle tracks |
+| X | Queue download of next undownloaded episode |
+| ZL + X | Queue next episode download with current subtitle burned in |
 | L / R | Seek −30 / +30 seconds |
-| Y | Toggle subtitles on / off (online only) |
 | D-pad Down | Watch mode (hide controls) |
-| D-pad Up | Show controls |
-| START | Exit app |
+| D-pad Up | Exit watch mode |
 
-**Offline playback** (files opened from Downloads Manager): subtitles are burned in at download time — the Y button is disabled. L/R restarts the file from the beginning (mid-file seeking is not available for downloaded TS files).
+A brief toast notification ("DL: E04 - Episode Title") appears when a download is queued.
+
+### Now Playing — Video (offline / from Downloads)
+
+| Button | Action |
+|--------|--------|
+| A | Pause / Resume |
+| B | Back to browse (keeps playing) |
+| START | Stop playback and exit |
+| X | Queue download of next undownloaded episode (requires internet) |
+| L / R | Seek ±30 seconds |
+| D-pad Down | Watch mode |
+| D-pad Up | Exit watch mode |
+
+Subtitles are burned in at download time; Y is not available for offline files.
 
 ### Manga Reader — Normal mode
 
@@ -101,8 +119,7 @@ The top screen shows the page; the bottom screen shows page info and controls.
 |--------|--------|
 | L / R or D-pad Left/Right | Previous / next page |
 | D-pad Up / Down | Zoom in / out |
-| Circle pad Up/Down | Pan vertically |
-| Circle pad Left/Right | Pan horizontally |
+| Circle pad | Pan (horizontal and vertical) |
 | SELECT | Toggle rotation (portrait ↔ landscape) |
 | START | Enter split-screen mode |
 | B | Back to browse |
@@ -117,10 +134,10 @@ The page spans both screens (top screen = upper half, bottom screen = lower half
 | D-pad Up / Down | Zoom in / out |
 | Circle pad Up/Down | Scroll the page vertically |
 | Circle pad Left/Right | Pan horizontally |
-| START | Return to normal mode (where SELECT rotates) |
+| START | Return to normal mode |
 | B | Return to normal mode |
 
-When entering split mode the zoom is automatically set to fit the full page height across both screens (480px combined). D-pad zooms in both modes; circle pad always pans/scrolls.
+When entering split mode the zoom is automatically set to fit the full page height across both screens (480px combined).
 
 ### Downloads Manager
 
@@ -128,13 +145,15 @@ Access from **Settings → Manage Downloads**.
 
 | Button | Action |
 |--------|--------|
-| D-pad Up/Down | Move cursor |
-| A | Open selected file (CBZ → reader, video → player) |
-| X | Delete selected file (and companion .txt) |
+| D-pad Up/Down (hold) | Move cursor / continuous scroll |
+| D-pad Left/Right (hold) | Scroll long filename sideways |
+| Circle pad Up/Down | Navigate download queue (top screen) |
+| A | Open selected file (CBZ → reader, video/audio → player) |
+| X | Delete selected file / Remove from queue |
 | Y | Cancel the currently active download |
 | B | Back to settings |
 
-The top screen shows the current download status including file name and progress. Items waiting in the queue are shown with a count.
+Files are grouped by type (video, books, audio) then by series, season, and episode number.
 
 ### Settings
 
