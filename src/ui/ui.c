@@ -959,12 +959,35 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 else
                     audio_player_pause();
             }
-            /* L/R to seek ±30 seconds */
+            /* For offline: only sync position when MVD is actually decoding frames.
+             * vs.state == VIDEO_PLAYING triggers even when MVD fails because AAC
+             * audio starts successfully. vs.position_ticks then races to end-of-file
+             * as the DEC thread consumes failed packets at SD-card speed.
+             * vs.frames_decoded only increments when mvdstdProcessVideoFrame succeeds,
+             * so it is zero for the entire duration of a failed seek session.
+             * Detect a new player session by checking if frames_decoded decreased. */
+            {
+                static int s_off_prev_decoded = 0;
+                if (state->now_playing_offline) {
+                    if (vs.frames_decoded < s_off_prev_decoded)
+                        s_off_prev_decoded = 0; /* new session started — counter reset */
+                    if (vs.frames_decoded > s_off_prev_decoded) {
+                        state->video_retry_ticks = vs.position_ticks;
+                        s_off_prev_decoded = vs.frames_decoded;
+                    }
+                } else {
+                    s_off_prev_decoded = 0;
+                }
+            }
+
+            /* L/R to seek (R: +30s, L: -15s) */
             if ((kdown & KEY_L) || (kdown & KEY_R)) {
-                int64_t offset = (kdown & KEY_R) ? 300000000LL : -300000000LL; /* ±30s */
+                int64_t offset = (kdown & KEY_R) ? 300000000LL : -150000000LL; /* R:+30s L:-15s */
                 int64_t cur_pos;
                 if (vid_active)
-                    cur_pos = vs.position_ticks;
+                    cur_pos = state->now_playing_offline
+                              ? state->video_retry_ticks   /* immune to DEC racing */
+                              : vs.position_ticks;
                 else
                     cur_pos = audio_player_get_status().position_ticks;
 
@@ -1083,13 +1106,14 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     (vid_active || state->now_playing_local_path[0]) &&
                     session->authenticated) {
                 bool with_subs = (kheld & KEY_ZL) != 0;
+                /* sub_idx: prefer current active track; -1 means "look up per-candidate" */
                 int  sub_idx   = with_subs ? state->subtitle_stream_index : -1;
                 const char *sub_name = (with_subs && state->subtitle_lang_pref[0])
                                        ? state->subtitle_lang_pref : NULL;
 
-#define TRY_QUEUE_NEXT(list_ptr, count, start_i)                              \
+#define TRY_QUEUE_NEXT(list_ptr, _mc, start_i)                                \
     do {                                                                       \
-        for (int _i = (start_i); _i < (count); _i++) {                        \
+        for (int _i = (start_i); _i < (_mc); _i++) {                          \
             jfin_item_t *cand = &(list_ptr)[_i];                               \
             if (cand->type != JFIN_ITEM_EPISODE &&                             \
                 cand->type != JFIN_ITEM_MOVIE) continue;                       \
@@ -1099,10 +1123,34 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             bool already = (_cf != NULL) || dl_queue_has_video(cand->id);      \
             if (_cf) fclose(_cf);                                              \
             if (already) continue;                                             \
+            /* When ZL+X but no sub currently active, look up subs for cand */\
+            int _eff_sub = sub_idx;                                            \
+            char _eff_lang[8] = {0};                                           \
+            const char *_eff_sub_name = sub_name;                              \
+            if (with_subs && _eff_sub < 0) {                                   \
+                jfin_subtitle_list_t _csl;                                      \
+                if (jfin_get_subtitle_streams(session, cand->id, &_csl) &&     \
+                        _csl.count > 0) {                                       \
+                    _eff_sub = _csl.subs[0].index;                             \
+                    strncpy(_eff_lang, _csl.subs[0].language, 7);              \
+                    _eff_sub_name = _eff_lang[0] ? _eff_lang : NULL;           \
+                    if (sub_name) {                                             \
+                        for (int _sli = 0; _sli < _csl.count; _sli++) {        \
+                            if (strcmp(_csl.subs[_sli].language, sub_name)==0) { \
+                                _eff_sub = _csl.subs[_sli].index;              \
+                                strncpy(_eff_lang, _csl.subs[_sli].language, 7);\
+                                _eff_sub_name = _eff_lang;                     \
+                                break;                                          \
+                            }                                                   \
+                        }                                                       \
+                    }                                                           \
+                }                                                               \
+            }                                                                   \
+            bool got_sub = with_subs && (_eff_sub >= 0);                       \
             jfin_stream_t xstream;                                             \
             vp_3d_mode_t xmode = item_3d_mode(cand);                          \
             if (jfin_get_video_stream(session, cand->id, 0,                    \
-                                      xmode != VP_3D_NONE, sub_idx, &xstream)) { \
+                                      xmode != VP_3D_NONE, _eff_sub, &xstream)) { \
                 char xname[256];                                               \
                 if (cand->series_name[0] && cand->season_number > 0)           \
                     snprintf(xname, sizeof(xname), "%s / Season %d / E%02d - %s", \
@@ -1112,14 +1160,14 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     snprintf(xname, sizeof(xname), "%s / E%02d - %s",         \
                              cand->series_name, cand->index_number, cand->name); \
                 else snprintf(xname, sizeof(xname), "%s", cand->name);        \
-                dl_queue_video(cand->id, xname, xstream.url, sub_name);       \
+                dl_queue_video(cand->id, xname, xstream.url, _eff_sub_name);  \
                 if (cand->index_number > 0)                                    \
                     snprintf(state->np_toast, sizeof(state->np_toast),         \
-                             with_subs ? "DL+sub: E%02d - %s"                  \
-                                       : "DL: E%02d - %s",                     \
+                             got_sub ? "DL+sub: E%02d - %s"                    \
+                                     : "DL: E%02d - %s",                       \
                              cand->index_number, cand->name);                  \
                 else snprintf(state->np_toast, sizeof(state->np_toast),        \
-                              with_subs ? "DL+sub: %s" : "DL: %s", cand->name);\
+                              got_sub ? "DL+sub: %s" : "DL: %s", cand->name); \
                 state->np_toast_timer = 150;                                   \
             }                                                                  \
             break;                                                             \
@@ -1419,16 +1467,28 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
         break;
 
     case VIEW_DOWNLOADS:
+        {
+            /* Auto-refresh when a queued download finishes */
+            static dl_state_t s_prev_dl = DL_IDLE;
+            dl_state_t s_cur_dl = dl_get_state();
+            if (s_prev_dl == DL_ACTIVE && s_cur_dl != DL_ACTIVE)
+                state->downloads_loaded = false;
+            s_prev_dl = s_cur_dl;
+        }
         if (!state->downloads_loaded) {
             dl_manager_scan();
             state->downloads_loaded = true;
             if (state->downloads_index >= dl_manager_count())
                 state->downloads_index = 0;
+            state->downloads_queue_focus = false;
+            state->downloads_queue_index = 0;
         }
 
         /* ── Circle pad: queue navigation (top screen) ─────────────── */
         {
-            int qcnt = dl_queue_count();
+            /* Index 0 = active download (when DL_ACTIVE), 1+ = queue items */
+            int has_active = (dl_get_state() == DL_ACTIVE) ? 1 : 0;
+            int total = has_active + dl_queue_count();
             if (kdown & KEY_CPAD_UP) {
                 state->downloads_queue_focus = true;
                 if (state->downloads_queue_index > 0)
@@ -1436,12 +1496,14 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             }
             if (kdown & KEY_CPAD_DOWN) {
                 state->downloads_queue_focus = true;
-                if (state->downloads_queue_index < qcnt - 1)
+                if (state->downloads_queue_index < total - 1)
                     state->downloads_queue_index++;
             }
-            /* Clamp if queue shrank */
-            if (state->downloads_queue_index >= qcnt)
-                state->downloads_queue_index = qcnt > 0 ? qcnt - 1 : 0;
+            /* Clamp if items shrank */
+            if (total == 0)
+                state->downloads_queue_index = 0;
+            else if (state->downloads_queue_index >= total)
+                state->downloads_queue_index = total - 1;
         }
 
         /* ── D-pad: downloaded file list — hold to repeat ───────────── */
@@ -1543,6 +1605,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                         state->now_playing.name[sizeof(state->now_playing.name)-1] = '\0';
                         state->has_now_playing = true;
                         state->now_playing_offline = true;
+                        state->video_retry_ticks = 0;  /* reset tracked seek position */
                         snprintf(state->now_playing_local_path,
                                  sizeof(state->now_playing_local_path), "%s", e->path);
                         /* Extract item_id from "sdmc:/.../video_ITEMID.ts" */
@@ -1561,15 +1624,24 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             }
         }
 
-        /* ── X: remove queue item (circle pad focus) or delete file ─── */
+        /* ── X: cancel active (index 0) or remove queued item ──────── */
         if (kdown & KEY_X) {
             if (state->downloads_queue_focus) {
-                int qcnt = dl_queue_count();
-                if (state->downloads_queue_index < qcnt) {
-                    dl_queue_remove(state->downloads_queue_index);
-                    qcnt = dl_queue_count();
-                    if (state->downloads_queue_index >= qcnt && qcnt > 0)
-                        state->downloads_queue_index = qcnt - 1;
+                bool has_active = (dl_get_state() == DL_ACTIVE);
+                if (has_active && state->downloads_queue_index == 0) {
+                    dl_cancel();
+                    state->downloads_queue_focus = false;
+                    state->downloads_queue_index = 0;
+                } else {
+                    int qi = state->downloads_queue_index - (has_active ? 1 : 0);
+                    int qcnt = dl_queue_count();
+                    if (qi >= 0 && qi < qcnt) {
+                        dl_queue_remove(qi);
+                        int has_active2 = (dl_get_state() == DL_ACTIVE) ? 1 : 0;
+                        int total = has_active2 + dl_queue_count();
+                        if (state->downloads_queue_index >= total && total > 0)
+                            state->downloads_queue_index = total - 1;
+                    }
                 }
             } else if (state->downloads_index < dl_manager_count()) {
                 dl_manager_delete(state->downloads_index);
@@ -1581,11 +1653,19 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             }
         }
 
-        /* Y: cancel active download */
-        if (kdown & KEY_Y)
-            dl_cancel();
-        if (kdown & KEY_B)
-            state->current_view = VIEW_SETTINGS;
+        /* Y: return to now-playing if something is playing */
+        if ((kdown & KEY_Y) && state->has_now_playing) {
+            state->previous_view = state->current_view;
+            state->current_view = VIEW_NOW_PLAYING;
+        }
+        if (kdown & KEY_B) {
+            if (state->downloads_queue_focus) {
+                state->downloads_queue_focus = false;
+                state->downloads_queue_index = 0;
+            } else {
+                state->current_view = VIEW_SETTINGS;
+            }
+        }
         break;
     }
 }
@@ -2010,7 +2090,7 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     if (!is_video)
         ctl_hint = "A:Pause B:Back STR:Stop ZL/ZR:Skip Y:Shuf SEL:Rep";
     else if (state->now_playing_offline)
-        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek X:DLnext";
+        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek X:DLnxt ZL+X:+sub";
     else
         ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek Y:Subs X:DLnxt ZL+X:+sub";
     draw_text(10, 180, 0.4f, rgba(COLOR_TEXT_PRIMARY), ctl_hint);
@@ -2111,8 +2191,14 @@ void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
             draw_text(200, y + 10, 0.45f, value_color, value);
     }
 
-    draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
-              "A:Toggle L/R:Change B:Back");
+    if (state->has_now_playing) {
+        draw_text(10, 213, 0.4f, rgba(COLOR_TEXT_SECONDARY),
+                  "A:Toggle L/R:Change B:Back");
+        draw_text(10, 228, 0.38f, rgba(COLOR_ACCENT), "Y: Return to Now Playing");
+    } else {
+        draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
+                  "A:Toggle L/R:Change B:Back");
+    }
 }
 
 /* ── Manga reader render ───────────────────────────────────────────── */
@@ -2227,29 +2313,82 @@ void ui_render_downloads(const ui_state_t *state)
 
     draw_text(10, 4, 0.52f, rgba(COLOR_PRIMARY), "Download Status");
 
-    dl_state_t vds = dl_get_state();
-    int qcnt = dl_queue_count();
+    dl_state_t vds  = dl_get_state();
+    int        qcnt = dl_queue_count();
+
+    /* ── Speed / progress tracking (sampled ~every second) ────────── */
+    static size_t     s_dl_prev_bytes = 0;
+    static uint64_t   s_dl_prev_tick  = 0;
+    static float      s_dl_speed      = 0.0f;
+    static dl_state_t s_dl_prev_state = DL_IDLE;
+
+    uint64_t dl_tick = svcGetSystemTick();
+    size_t   dl_now  = (vds == DL_ACTIVE) ? dl_bytes() : 0;
+    size_t   dl_tot  = (vds == DL_ACTIVE) ? dl_total() : 0;
+
+    if (vds != s_dl_prev_state) {
+        s_dl_prev_bytes = dl_now;
+        s_dl_prev_tick  = dl_tick;
+        s_dl_speed      = 0.0f;
+        s_dl_prev_state = vds;
+    }
+    {
+        uint64_t diff = dl_tick - s_dl_prev_tick;
+        if (vds == DL_ACTIVE && diff >= 268000000ULL && dl_now >= s_dl_prev_bytes) {
+            float dt_s      = (float)diff / 268000000.0f;
+            float new_sp    = (float)(dl_now - s_dl_prev_bytes) / dt_s;
+            s_dl_speed      = (s_dl_speed > 0.0f) ? s_dl_speed * 0.6f + new_sp * 0.4f : new_sp;
+            s_dl_prev_bytes = dl_now;
+            s_dl_prev_tick  = dl_tick;
+        }
+    }
+
+    char spd_str[20] = "";
+    if      (s_dl_speed >= 1048576.0f) snprintf(spd_str, sizeof(spd_str), "%.1fMB/s", s_dl_speed/1048576.0f);
+    else if (s_dl_speed >= 1024.0f)    snprintf(spd_str, sizeof(spd_str), "%.0fKB/s", s_dl_speed/1024.0f);
+    else if (s_dl_speed > 0.0f)        snprintf(spd_str, sizeof(spd_str), "%.0fB/s",  s_dl_speed);
+
+    char eta_str[20] = "";
+    if (s_dl_speed > 1024.0f && dl_tot > dl_now) {
+        int secs = (int)((float)(dl_tot - dl_now) / s_dl_speed);
+        if      (secs >= 3600) snprintf(eta_str, sizeof(eta_str), "~%dh%02dm", secs/3600, (secs%3600)/60);
+        else if (secs >= 60)   snprintf(eta_str, sizeof(eta_str), "~%dm%02ds", secs/60, secs%60);
+        else                   snprintf(eta_str, sizeof(eta_str), "~%ds",       secs);
+    }
+
+    int dl_pct = (dl_tot > 0) ? (int)((float)dl_now / (float)dl_tot * 100.0f) : -1;
 
     /* Active download */
     if (vds == DL_ACTIVE) {
-        size_t tot = dl_total(), now = dl_bytes();
-        draw_text(10, 26, 0.42f, rgba(COLOR_ACCENT), dl_item_name());
+        char name_buf[56];
+        snprintf(name_buf, sizeof(name_buf), "%.54s", dl_item_name());
+        draw_text(10, 26, 0.42f, rgba(COLOR_ACCENT), name_buf);
         if (dl_sub_name()[0]) {
-            char si[80];
+            char si[72];
             snprintf(si, sizeof(si), "Subs: %s", dl_sub_name());
-            draw_text(10, 43, 0.38f, rgba(COLOR_VALUE), si);
+            draw_text(10, 40, 0.34f, rgba(COLOR_VALUE), si);
         }
-        char prog[64];
-        if (tot > 0) {
-            snprintf(prog, sizeof(prog), "%.1f / %.1f MB  (%.0f%%)",
-                     now/(1024.0f*1024.0f), tot/(1024.0f*1024.0f),
-                     (float)now/(float)tot*100.0f);
-            draw_rect(10, 60, 380, 7, rgba(COLOR_BG_CARD));
-            draw_rect(10, 60, (int)(380.0f*(float)now/(float)tot), 7, rgba(COLOR_PRIMARY));
+        if (dl_tot > 0) {
+            int fill = (int)(380.0f * (float)dl_now / (float)dl_tot);
+            draw_rect(10, 53, 380, 8, rgba(COLOR_BG_CARD));
+            draw_rect(10, 53, fill, 8, rgba(COLOR_PRIMARY));
+            char prog[64];
+            snprintf(prog, sizeof(prog), "%.1f / %.1f MB  (%d%%)",
+                     dl_now/1048576.0f, dl_tot/1048576.0f, dl_pct);
+            draw_text(10, 64, 0.38f, rgba(COLOR_TEXT_SECONDARY), prog);
         } else {
-            snprintf(prog, sizeof(prog), "%.1f MB downloaded", now/(1024.0f*1024.0f));
+            char prog[48];
+            snprintf(prog, sizeof(prog), "%.1f MB downloaded", dl_now/1048576.0f);
+            draw_text(10, 64, 0.38f, rgba(COLOR_TEXT_SECONDARY), prog);
         }
-        draw_text(10, 70, 0.38f, rgba(COLOR_TEXT_SECONDARY), prog);
+        if (spd_str[0]) {
+            char spd_eta[44] = "";
+            if (eta_str[0])
+                snprintf(spd_eta, sizeof(spd_eta), "%s  %s", spd_str, eta_str);
+            else
+                snprintf(spd_eta, sizeof(spd_eta), "%s", spd_str);
+            draw_text(10, 76, 0.38f, rgba(COLOR_ACCENT), spd_eta);
+        }
     } else if (vds == DL_DONE) {
         draw_text(10, 26, 0.42f, rgba(0x88FF88FF), "Last download complete");
     } else if (vds == DL_ERROR) {
@@ -2259,39 +2398,57 @@ void ui_render_downloads(const ui_state_t *state)
         draw_text(10, 42, 0.38f, rgba(COLOR_TEXT_SECONDARY), "Browse items and press X to queue");
     }
 
-    /* Queue list with optional navigation cursor */
+    /* Queue list: index 0 = active download, 1+ = queued items */
     int qy = 90;
-    if (qcnt > 0) {
-        char qhdr[48];
+    bool has_active = (vds == DL_ACTIVE);
+    int active_off  = has_active ? 1 : 0;
+    int total_slots = active_off + qcnt;
+    if (total_slots > 0) {
+        char qhdr[64];
         snprintf(qhdr, sizeof(qhdr), "Queue: %d item%s%s",
-                 qcnt, qcnt == 1 ? "" : "s",
+                 total_slots, total_slots == 1 ? "" : "s",
                  state->downloads_queue_focus ? "  [Circle]" : "");
         draw_text(10, qy, 0.44f,
                   state->downloads_queue_focus ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_PRIMARY),
                   qhdr);
         qy += 18;
-        for (int qi = 0; qi < qcnt && qi < 6; qi++) {
-            bool qsel = state->downloads_queue_focus && (qi == state->downloads_queue_index);
+        int shown = 0;
+        if (has_active && shown < 6) {
+            bool qsel = state->downloads_queue_focus && (state->downloads_queue_index == 0);
+            char ql[72];
+            if (dl_pct >= 0)
+                snprintf(ql, sizeof(ql), "%s1. [%d%%] %.43s", qsel ? "> " : "  ", dl_pct, dl_item_name());
+            else
+                snprintf(ql, sizeof(ql), "%s1. [DL] %.46s",   qsel ? "> " : "  ", dl_item_name());
+            draw_text(10, qy, 0.38f,
+                      qsel ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_SECONDARY), ql);
+            qy += 15;
+            shown++;
+        }
+        for (int qi = 0; qi < qcnt && shown < 6; qi++) {
+            int slot = qi + active_off;
+            bool qsel = state->downloads_queue_focus && (slot == state->downloads_queue_index);
             char ql[72];
             snprintf(ql, sizeof(ql), "%s%d. %.50s",
-                     qsel ? "> " : "  ", qi + 1, dl_queue_item_name(qi));
+                     qsel ? "> " : "  ", slot + 2, dl_queue_item_name(qi));
             draw_text(10, qy, 0.38f,
                       qsel ? rgba(COLOR_TEXT_PRIMARY) : rgba(COLOR_TEXT_SECONDARY), ql);
             qy += 15;
+            shown++;
         }
-        if (qcnt > 6)
+        if (total_slots > 6)
             draw_text(10, qy, 0.36f, rgba(COLOR_TEXT_SECONDARY), "  ...");
-    } else if (vds != DL_ACTIVE) {
+    } else {
         draw_text(10, qy, 0.40f, rgba(COLOR_TEXT_SECONDARY), "Queue empty");
     }
 
     /* Hint at bottom of top screen */
-    if (state->downloads_queue_focus && dl_queue_count() > 0)
+    if (state->downloads_queue_focus)
         draw_text(10, 225, 0.36f, rgba(COLOR_TEXT_SECONDARY),
-                  "Circle:Nav  X:Remove  Dpad:Files");
-    else if (vds == DL_ACTIVE)
+                  "Circle:Nav  X:Cancel/Remove  B:Exit");
+    else if (total_slots > 0)
         draw_text(10, 225, 0.36f, rgba(COLOR_TEXT_SECONDARY),
-                  "Y:Cancel DL  Circle:Queue");
+                  "Circle:Select  Y:NowPlay");
 
     C2D_TargetClear(s_bottom, bg_color());
     C2D_SceneBegin(s_bottom);
@@ -2364,8 +2521,8 @@ void ui_render_downloads(const ui_state_t *state)
 
     draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
               state->downloads_queue_focus
-                  ? "A:Open  X:RemoveQueue  L/R:Scroll  B:Back"
-                  : "A:Open  X:Delete  L/R:Scroll  B:Back");
+                  ? "A:Open  X:Cancel/Del  B:Exit queue"
+                  : "A:Open  X:Delete  Y:NowPlay  B:Back");
 }
 
 /* ── Main render dispatch ──────────────────────────────────────────── */
