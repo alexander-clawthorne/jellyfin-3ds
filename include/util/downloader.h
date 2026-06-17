@@ -38,6 +38,11 @@ bool dl_queue_video(const char *item_id, const char *item_name,
                     const char *url, const char *sub_track_name,
                     const char *subtitle_url, int64_t runtime_ticks);
 
+/* Queue a subtitle-only download (.ass). Use when the video is already cached
+ * but has no companion subtitle, or to replace a bad one. */
+bool dl_queue_subtitle_only(const char *item_id, const char *item_name,
+                            const char *subtitle_url);
+
 /* Queue a book/CBZ download. url must include api_key.
  * Skips download if the file already exists in the cache. */
 bool dl_queue_book(const char *item_id, const char *display_name, const char *url);

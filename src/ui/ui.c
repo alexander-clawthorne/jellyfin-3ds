@@ -863,8 +863,40 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 }
             }
         }
+        /* ZL+Y: download just the subtitle (.ass) for the hovered video item */
+        if ((kdown & KEY_Y) && (kheld & KEY_ZL)
+                && state->selected_index < state->items.count
+                && session->authenticated) {
+            jfin_item_t *item = &state->items.items[state->selected_index];
+            if (item->type == JFIN_ITEM_EPISODE || item->type == JFIN_ITEM_MOVIE) {
+                int sub_idx = -1;
+                char sub_lang[8] = "";
+                if (state->subtitle_list_loaded && state->subtitle_list.count > 0) {
+                    sub_idx = state->subtitle_list.subs[0].index;
+                    strncpy(sub_lang, state->subtitle_list.subs[0].language, 7);
+                } else {
+                    jfin_subtitle_list_t tmp_subs;
+                    if (jfin_get_subtitle_streams(session, item->id, &tmp_subs)
+                            && tmp_subs.count > 0) {
+                        sub_idx = tmp_subs.subs[0].index;
+                        strncpy(sub_lang, tmp_subs.subs[0].language, 7);
+                    }
+                }
+                if (sub_idx >= 0) {
+                    jfin_stream_t sub_stream;
+                    if (jfin_get_video_stream(session, item->id, 0, false,
+                                              sub_idx, &sub_stream)
+                            && sub_stream.subtitle_url[0]) {
+                        char dl_name[256];
+                        snprintf(dl_name, sizeof(dl_name), "%s", item->name);
+                        if (dl_queue_subtitle_only(item->id, dl_name, sub_stream.subtitle_url))
+                            log_write("UI: queued sub-only for %s (%s)", item->id, sub_lang);
+                    }
+                }
+            }
+        }
         /* Y to toggle now-playing view */
-        if ((kdown & KEY_Y) && state->has_now_playing) {
+        if ((kdown & KEY_Y) && !(kheld & KEY_ZL) && state->has_now_playing) {
             state->previous_view = state->current_view;
             state->current_view = VIEW_NOW_PLAYING;
         }
@@ -1337,6 +1369,41 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     }
                 }
 #undef TRY_QUEUE_NEXT
+            }
+            /* ZL+Y (now-playing): download subtitle .ass for the current episode */
+            if ((kdown & KEY_Y) && (kheld & KEY_ZL) && state->has_now_playing
+                    && state->now_playing.id[0] && session->authenticated) {
+                int sub_idx = state->subtitle_stream_index;
+                char sub_lang[8] = "";
+                if (sub_idx >= 0 && state->subtitle_list_loaded) {
+                    for (int si = 0; si < state->subtitle_list.count; si++) {
+                        if (state->subtitle_list.subs[si].index == sub_idx) {
+                            strncpy(sub_lang, state->subtitle_list.subs[si].language, 7);
+                            break;
+                        }
+                    }
+                } else if (sub_idx < 0) {
+                    jfin_subtitle_list_t tmp_subs;
+                    if (jfin_get_subtitle_streams(session, state->now_playing.id, &tmp_subs)
+                            && tmp_subs.count > 0) {
+                        sub_idx = tmp_subs.subs[0].index;
+                        strncpy(sub_lang, tmp_subs.subs[0].language, 7);
+                    }
+                }
+                if (sub_idx >= 0) {
+                    jfin_stream_t sub_stream;
+                    if (jfin_get_video_stream(session, state->now_playing.id, 0, false,
+                                              sub_idx, &sub_stream)
+                            && sub_stream.subtitle_url[0]) {
+                        if (dl_queue_subtitle_only(state->now_playing.id,
+                                                   state->now_playing.name,
+                                                   sub_stream.subtitle_url)) {
+                            snprintf(state->np_toast, sizeof(state->np_toast),
+                                     "DL sub: %s", sub_lang[0] ? sub_lang : "track");
+                            state->np_toast_timer = 150;
+                        }
+                    }
+                }
             }
             /* B: back to browse, keep playing */
             if (kdown & KEY_B) {
@@ -2024,7 +2091,7 @@ void ui_render_browse(const ui_state_t *state)
                       "A:Sel  B:Back  L/R:Pg  SEL:Search");
         else if (sel_dl)
             draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
-                      "A:Play  X:DL  ZL+X:DL+Sub  B:Back");
+                      "A:Play  X:DL  ZL+X:DL+Sub  ZL+Y:DL Sub  B:Back");
         else
             draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
                       "A:Select  B:Back  SEL:Search");
@@ -2228,9 +2295,9 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     if (!is_video)
         ctl_hint = "A:Pause B:Back STR:Stop ZL/ZR:Skip Y:Shuf SEL:Rep";
     else if (state->now_playing_offline)
-        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek X:DLnxt ZL+X:+sub";
+        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek X:DLnxt ZL+X:+sub ZL+Y:DLsub";
     else
-        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek Y:Subs X:DLnxt ZL+X:+sub";
+        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek Y:Subs X:DLnxt ZL+X:+sub ZL+Y:DLsub";
     draw_text(10, 180, 0.4f, rgba(COLOR_TEXT_PRIMARY), ctl_hint);
 }
 
