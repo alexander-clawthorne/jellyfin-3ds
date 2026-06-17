@@ -231,6 +231,80 @@ static void draw_rect(float x, float y, float w, float h, u32 color)
     C2D_DrawRectSolid(x, y, 0.0f, w, h, color);
 }
 
+#define SUB_SCALE 0.55f
+#define SUB_LINE_H 14.0f
+
+static void draw_subtitles_top(void)
+{
+    vp_subtitle_t subs[4];
+    int sub_count = video_player_get_subtitles(subs, 4);
+    if (!sub_count) return;
+
+    u32 outline = C2D_Color32(0, 0, 0, 200);
+
+    for (int si = 0; si < sub_count; si++) {
+        const vp_subtitle_t *s = &subs[si];
+        u32 fg = s->color ? s->color : C2D_Color32(255, 255, 255, 255);
+
+        /* Count lines to compute total text block height */
+        int nlines = 1;
+        for (const char *q = s->text; *q; q++) if (*q == '\n') nlines++;
+
+        /* Anchor point in screen coords */
+        float ax = (s->screen_x >= 0.0f) ? s->screen_x : 200.0f;
+        float ay = (s->screen_y >= 0.0f) ? s->screen_y : 226.0f;
+
+        /* Vertical placement based on ASS alignment row (1-3=bottom, 4-6=mid, 7-9=top) */
+        float block_h = nlines * SUB_LINE_H;
+        int row = (s->alignment - 1) / 3; /* 0=bottom, 1=mid, 2=top */
+        float line_y;
+        if (row == 0)      line_y = ay - block_h;          /* bottom-anchored */
+        else if (row == 1) line_y = ay - block_h / 2.0f;   /* middle-anchored */
+        else               line_y = ay;                     /* top-anchored */
+
+        /* Split text on '\n' and render each line */
+        const char *lp = s->text;
+        while (lp && *lp) {
+            const char *nl = strchr(lp, '\n');
+            int ll = nl ? (int)(nl - lp) : (int)strlen(lp);
+
+            char lbuf[260];
+            if (ll >= (int)sizeof(lbuf)) ll = sizeof(lbuf) - 1;
+            memcpy(lbuf, lp, ll);
+            lbuf[ll] = '\0';
+
+            C2D_Text ct;
+            C2D_TextParse(&ct, s_text_buf, lbuf);
+            C2D_TextOptimize(&ct);
+
+            float tw = 0, th = 0;
+            C2D_TextGetDimensions(&ct, SUB_SCALE, SUB_SCALE, &tw, &th);
+            (void)th;
+
+            /* Horizontal placement */
+            int col = (s->alignment - 1) % 3; /* 0=left, 1=center, 2=right */
+            float lx;
+            if (col == 0)      lx = ax;
+            else if (col == 1) lx = ax - tw / 2.0f;
+            else               lx = ax - tw;
+
+            /* Clamp to screen */
+            if (lx < 2.0f) lx = 2.0f;
+            if (lx + tw > 398.0f) lx = 398.0f - tw;
+
+            /* Outline then fill */
+            C2D_DrawText(&ct, C2D_WithColor, lx-1, line_y-1, 0.5f, SUB_SCALE, SUB_SCALE, outline);
+            C2D_DrawText(&ct, C2D_WithColor, lx+1, line_y-1, 0.5f, SUB_SCALE, SUB_SCALE, outline);
+            C2D_DrawText(&ct, C2D_WithColor, lx-1, line_y+1, 0.5f, SUB_SCALE, SUB_SCALE, outline);
+            C2D_DrawText(&ct, C2D_WithColor, lx+1, line_y+1, 0.5f, SUB_SCALE, SUB_SCALE, outline);
+            C2D_DrawText(&ct, C2D_WithColor, lx,   line_y,   0.5f, SUB_SCALE, SUB_SCALE, fg);
+
+            line_y += SUB_LINE_H;
+            lp = nl ? nl + 1 : NULL;
+        }
+    }
+}
+
 static void format_ticks(int64_t ticks, char *out, int out_len)
 {
     int total_sec = (int)(ticks / 10000000LL);
@@ -561,7 +635,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                                                   mode_3d != VP_3D_NONE,
                                                   state->subtitle_stream_index,
                                                   &stream) &&
-                            video_player_play(stream.url, item->runtime_ticks, 0, mode_3d)) {
+                            video_player_play(stream.url, stream.subtitle_url, item->runtime_ticks, 0, mode_3d)) {
                             state->now_playing_offline = false;
                             state->now_playing_local_path[0] = '\0';
                             state->now_playing = *item;
@@ -852,7 +926,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                                                       next_mode != VP_3D_NONE,
                                                       state->subtitle_stream_index,
                                                       &stream) &&
-                                video_player_play(stream.url, next_item->runtime_ticks, 0, next_mode)) {
+                                video_player_play(stream.url, stream.subtitle_url, next_item->runtime_ticks, 0, next_mode)) {
                                 started = true;
                             } else if (jfin_get_audio_stream(session, next_item->id, 0, &stream)) {
                                 audio_player_play(stream.url, next_item->runtime_ticks, 0);
@@ -922,7 +996,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                                                       retry_mode != VP_3D_NONE,
                                                       state->subtitle_stream_index,
                                                       &retry_stream))
-                                video_player_play(retry_stream.url,
+                                video_player_play(retry_stream.url, retry_stream.subtitle_url,
                                                   state->now_playing.runtime_ticks,
                                                   state->video_retry_ticks,
                                                   retry_mode);
@@ -945,7 +1019,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                                               fb_mode != VP_3D_NONE,
                                               -1,
                                               &fb_stream))
-                        video_player_play(fb_stream.url,
+                        video_player_play(fb_stream.url, NULL,
                                           state->now_playing.runtime_ticks,
                                           state->video_retry_ticks,
                                           fb_mode);
@@ -1017,7 +1091,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     if (state->now_playing_offline) {
                         /* Seek by byte offset in local TS file (net_thread estimates position) */
                         state->video_retry_ticks = new_pos;
-                        video_player_play(state->now_playing_local_path, 0, new_pos, VP_3D_NONE);
+                        video_player_play(state->now_playing_local_path, NULL, 0, new_pos, VP_3D_NONE);
                     } else {
                         vp_3d_mode_t mode_3d = item_3d_mode(&state->now_playing);
                         state->video_retry_ticks = new_pos;
@@ -1025,7 +1099,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                                                   mode_3d != VP_3D_NONE,
                                                   state->subtitle_stream_index,
                                                   &stream))
-                            video_player_play(stream.url, state->now_playing.runtime_ticks, new_pos, mode_3d);
+                            video_player_play(stream.url, stream.subtitle_url, state->now_playing.runtime_ticks, new_pos, mode_3d);
                     }
                 } else {
                     /* Audio seek: only call Jellyfin for online streams.
@@ -1085,7 +1159,8 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 if (jfin_get_video_stream(session, state->now_playing.id, resume_ticks,
                                           sub_mode != VP_3D_NONE,
                                           state->subtitle_stream_index, &sub_stream))
-                    video_player_play(sub_stream.url, state->now_playing.runtime_ticks,
+                    video_player_play(sub_stream.url, sub_stream.subtitle_url,
+                                      state->now_playing.runtime_ticks,
                                       resume_ticks, sub_mode);
             }
             /* Y (audio): toggle shuffle */
@@ -1281,7 +1356,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                                                           next_mode != VP_3D_NONE,
                                                           state->subtitle_stream_index,
                                                           &stream) &&
-                                    video_player_play(stream.url, next_item->runtime_ticks, 0, next_mode)) {
+                                    video_player_play(stream.url, stream.subtitle_url, next_item->runtime_ticks, 0, next_mode)) {
                                     started = true;
                                 } else if (jfin_get_audio_stream(session, next_item->id, 0, &stream)) {
                                     audio_player_play(stream.url, next_item->runtime_ticks, 0);
@@ -1635,7 +1710,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     reader_open_local(e->path);
                 } else {
                     audio_player_stop();
-                    if (video_player_play(e->path, 0, 0, VP_3D_NONE)) {
+                    if (video_player_play(e->path, NULL, 0, 0, VP_3D_NONE)) {
                         strncpy(state->now_playing.name, e->name, sizeof(state->now_playing.name)-1);
                         state->now_playing.name[sizeof(state->now_playing.name)-1] = '\0';
                         state->has_now_playing = true;
@@ -1945,7 +2020,7 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
             char rbuf[48];
             snprintf(rbuf, sizeof(rbuf), "Retrying in %ds (%d/%d)...", secs,
                      state->video_retry_count + 1, max_retries);
-            draw_text(60, 70, 0.65f, rgba(COLOR_PRIMARY), "Subtitle transcode starting");
+            draw_text(80, 70, 0.65f, rgba(COLOR_PRIMARY), "Video not ready");
             draw_text(40, 108, 0.5f, rgba(COLOR_TEXT_PRIMARY), rbuf);
             draw_text(30, 143, 0.5f, rgba(COLOR_TEXT_SECONDARY), state->now_playing.name);
             draw_text(35, 178, 0.4f, rgba(COLOR_TEXT_SECONDARY),
@@ -1968,12 +2043,14 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     } else if (is_video) {
         /* Render video frame on top screen */
         video_player_render_frame();
+        draw_subtitles_top();
 
         /* Right eye for stereoscopic 3D (only when 3D slider is up) */
         if (vstatus.is_3d && osGet3DSliderState() > 0.0f) {
             C2D_TargetClear(s_top_right, rgba(0x000000FF));
             C2D_SceneBegin(s_top_right);
             video_player_render_frame_right();
+            draw_subtitles_top();
         }
     } else if (player->state == PLAYER_LOADING) {
         /* Show buffering indicator while audio is loading */

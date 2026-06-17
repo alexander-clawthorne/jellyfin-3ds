@@ -10,6 +10,7 @@
 
 #include <3ds.h>
 #include <citro2d.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -130,6 +131,10 @@ static struct {
     u64             last_fps_tick;
     float           decode_fps;
     float           display_fps;
+
+    /* Client-side subtitle track (main thread only) */
+    vp_subtitle_t  *subtitle_entries;
+    int             subtitle_count;
 } s_vp;
 
 /* Morton tiling offset tables — declared early, used by convert thread */
@@ -1061,7 +1066,188 @@ void video_player_cleanup(void)
     video_player_stop();
 }
 
-bool video_player_play(const char *url, int64_t duration_ticks,
+/* ── Client-side ASS subtitle loader ───────────────────────────────── */
+
+typedef struct { char *data; size_t size; size_t cap; } ass_buf_t;
+
+static size_t ass_write_cb(void *ptr, size_t sz, size_t nmemb, void *ud)
+{
+    ass_buf_t *b = (ass_buf_t *)ud;
+    size_t n = sz * nmemb;
+    if (b->size + n >= b->cap) {
+        size_t nc = (b->cap + n) * 2;
+        char *nd = realloc(b->data, nc + 1);
+        if (!nd) return 0;
+        b->data = nd;
+        b->cap = nc;
+    }
+    memcpy(b->data + b->size, ptr, n);
+    b->size += n;
+    b->data[b->size] = '\0';
+    return n;
+}
+
+static int64_t ass_parse_time(const char *s)
+{
+    int h = 0, m = 0, sec = 0, cs = 0;
+    sscanf(s, "%d:%d:%d.%d", &h, &m, &sec, &cs);
+    return ((int64_t)h * 3600 + m * 60 + sec) * 10000000LL + cs * 100000LL;
+}
+
+static void ass_strip_tags(const char *src, char *dst, int dst_max,
+                           float *px, float *py, int *align, uint32_t *color)
+{
+    int di = 0;
+    while (*src && di < dst_max - 1) {
+        if (*src == '{') {
+            const char *end = strchr(src, '}');
+            if (!end) { src++; continue; }
+            const char *p = src + 1;
+            while (p < end) {
+                if (*p == '\\') {
+                    p++;
+                    if (strncmp(p, "pos(", 4) == 0) {
+                        sscanf(p + 4, "%f,%f", px, py);
+                    } else if (strncmp(p, "an", 2) == 0 &&
+                               p[2] >= '1' && p[2] <= '9') {
+                        *align = p[2] - '0';
+                    } else if (strncmp(p, "c&H", 3) == 0 ||
+                               strncmp(p, "1c&H", 4) == 0) {
+                        const char *hstart = (p[0] == '1') ? p + 4 : p + 3;
+                        unsigned int bgr = 0;
+                        sscanf(hstart, "%x", &bgr);
+                        u8 r = bgr & 0xFF;
+                        u8 g = (bgr >> 8) & 0xFF;
+                        u8 b = (bgr >> 16) & 0xFF;
+                        *color = C2D_Color32(r, g, b, 255);
+                    } else if (*p == 'N' || *p == 'n') {
+                        if (di < dst_max - 1) dst[di++] = '\n';
+                    }
+                }
+                p++;
+            }
+            src = end + 1;
+        } else if (*src == '\\' && (*(src+1) == 'N' || *(src+1) == 'n')) {
+            if (di < dst_max - 1) dst[di++] = '\n';
+            src += 2;
+        } else {
+            dst[di++] = *src++;
+        }
+    }
+    dst[di] = '\0';
+}
+
+static void subtitle_parse_ass(const char *text)
+{
+    float play_res_x = 640.0f, play_res_y = 480.0f;
+    const char *p;
+
+    p = strstr(text, "PlayResX:");
+    if (p) play_res_x = (float)atoi(p + 9);
+    p = strstr(text, "PlayResY:");
+    if (p) play_res_y = (float)atoi(p + 9);
+
+    /* Count Dialogue lines to pre-allocate */
+    int count = 0;
+    p = text;
+    while ((p = strstr(p, "\nDialogue:")) != NULL) { count++; p++; }
+    if (count == 0) { log_write("SUB: no Dialogue lines"); return; }
+    if (count > 4096) count = 4096;
+
+    s_vp.subtitle_entries = malloc(count * sizeof(vp_subtitle_t));
+    if (!s_vp.subtitle_entries) return;
+
+    int idx = 0;
+    p = text;
+    while ((p = strstr(p, "\nDialogue:")) != NULL && idx < count) {
+        p++;                                    /* skip leading \n */
+        const char *eol = strchr(p, '\n');
+
+        /* Skip "Dialogue: " (10 chars) and split first 9 commas */
+        const char *fp = p + 10;
+        char start_ts[16] = {0}, end_ts[16] = {0};
+        int fi;
+        for (fi = 0; fi < 9 && fp && *fp; fi++) {
+            const char *comma = strchr(fp, ',');
+            if (!comma || (eol && comma > eol)) break;
+            int n = (int)(comma - fp);
+            if (fi == 1 && n < 16) { memcpy(start_ts, fp, n); start_ts[n] = '\0'; }
+            if (fi == 2 && n < 16) { memcpy(end_ts,   fp, n); end_ts[n]   = '\0'; }
+            fp = comma + 1;
+        }
+        if (fi < 9 || !fp) continue;           /* malformed line */
+
+        int tlen = eol ? (int)(eol - fp) : (int)strlen(fp);
+        while (tlen > 0 && (fp[tlen-1] == '\r' || fp[tlen-1] == '\n')) tlen--;
+
+        char tmp[512];
+        if (tlen >= (int)sizeof(tmp)) tlen = sizeof(tmp) - 1;
+        memcpy(tmp, fp, tlen);
+        tmp[tlen] = '\0';
+
+        vp_subtitle_t *e = &s_vp.subtitle_entries[idx];
+        e->start_ticks = ass_parse_time(start_ts);
+        e->end_ticks   = ass_parse_time(end_ts);
+        e->screen_x    = -1.0f;
+        e->screen_y    = -1.0f;
+        e->alignment   = 2;
+        e->color       = 0;
+
+        float raw_x = -1.0f, raw_y = -1.0f;
+        ass_strip_tags(tmp, e->text, sizeof(e->text), &raw_x, &raw_y,
+                       &e->alignment, &e->color);
+
+        if (raw_x >= 0.0f) {
+            e->screen_x = raw_x * 400.0f / play_res_x;
+            e->screen_y = raw_y * 240.0f / play_res_y;
+        }
+
+        if (e->text[0]) idx++;
+    }
+    s_vp.subtitle_count = idx;
+    log_write("SUB: parsed %d cues (PlayRes %.0fx%.0f)",
+              idx, play_res_x, play_res_y);
+}
+
+static void subtitle_load(const char *url)
+{
+    free(s_vp.subtitle_entries);
+    s_vp.subtitle_entries = NULL;
+    s_vp.subtitle_count = 0;
+
+    if (!url || !url[0]) return;
+
+    CURL *curl = curl_easy_init();
+    if (!curl) return;
+
+    ass_buf_t buf = {0};
+    buf.cap = 65536;
+    buf.data = malloc(buf.cap + 1);
+    if (!buf.data) { curl_easy_cleanup(curl); return; }
+    buf.data[0] = '\0';
+
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, ass_write_cb);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buf);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 20L);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Jellyfin-3DS/" JFIN_VERSION);
+    CURLcode res = curl_easy_perform(curl);
+    curl_easy_cleanup(curl);
+
+    if (res != CURLE_OK || !buf.size) {
+        log_write("SUB: fetch failed: %s", curl_easy_strerror(res));
+        free(buf.data);
+        return;
+    }
+    log_write("SUB: fetched %zu bytes", buf.size);
+    subtitle_parse_ass(buf.data);
+    free(buf.data);
+}
+
+bool video_player_play(const char *url, const char *subtitle_url,
+                       int64_t duration_ticks,
                        int64_t seek_offset_ticks, vp_3d_mode_t mode_3d)
 {
     log_write("PLAY: starting video, url_len=%d seek=%lld 3d=%d",
@@ -1102,6 +1288,9 @@ bool video_player_play(const char *url, int64_t duration_ticks,
      * channel 0 (the music player's channel). */
     s_vp.ndsp_channel = 1;
     ndspChnReset(1);
+
+    /* Fetch and parse subtitle track before starting threads */
+    subtitle_load(subtitle_url);
 
     /* Launch threads (-1 = any available core) */
     s32 prio = 0;
@@ -1212,6 +1401,10 @@ void video_player_stop(void)
     s_vp.mode_3d = VP_3D_NONE;
     s_vp.is_local = false;
     s_vp.demux.local_path = NULL;
+
+    free(s_vp.subtitle_entries);
+    s_vp.subtitle_entries = NULL;
+    s_vp.subtitle_count = 0;
 
     s_vp.state = VIDEO_STOPPED;
 }
@@ -1332,4 +1525,33 @@ void video_player_render_frame_right(void)
     float x, y, sx, sy;
     compute_3d_draw_rect(&x, &y, &sx, &sy);
     C2D_DrawImageAt(s_vp.frame_img_right, x, y, 0.5f, NULL, sx, sy);
+}
+
+int video_player_get_subtitles(vp_subtitle_t *out, int max_count)
+{
+    if (!s_vp.subtitle_entries || s_vp.subtitle_count == 0 || max_count <= 0)
+        return 0;
+
+    int64_t pos = s_vp.position_ticks;
+    int count = 0;
+
+    /* Binary search on start_ticks: find first entry where start > pos.
+     * All entries before this index have started; check which are still active. */
+    int lo = 0, hi = s_vp.subtitle_count;
+    while (lo < hi) {
+        int mid = (lo + hi) / 2;
+        if (s_vp.subtitle_entries[mid].start_ticks <= pos)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+    /* Scan backwards from lo-1: entries that started and haven't ended yet.
+     * Limit to a 60-second window to handle long-running title cards etc. */
+    for (int i = lo - 1; i >= 0 && count < max_count; i--) {
+        if (s_vp.subtitle_entries[i].end_ticks > pos)
+            out[count++] = s_vp.subtitle_entries[i];
+        if (pos - s_vp.subtitle_entries[i].start_ticks > 600000000LL) /* 60s cap */
+            break;
+    }
+    return count;
 }
