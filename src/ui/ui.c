@@ -1157,14 +1157,10 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             if ((kdown & KEY_Y) && vid_active && state->now_playing_offline
                 && state->now_playing_sub_path[0]) {
                 state->offline_subs_on = !state->offline_subs_on;
-                if (state->offline_subs_on) {
+                if (state->offline_subs_on)
                     video_player_load_subtitles(state->now_playing_sub_path);
-                    snprintf(state->np_toast, sizeof(state->np_toast), "Subtitles on");
-                } else {
+                else
                     video_player_clear_subtitles();
-                    snprintf(state->np_toast, sizeof(state->np_toast), "Subtitles off");
-                }
-                state->np_toast_timer = 150;
             }
             /* Y (video online): cycle subtitle tracks */
             if ((kdown & KEY_Y) && vid_active && !state->now_playing_offline) {
