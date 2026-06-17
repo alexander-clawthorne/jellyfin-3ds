@@ -189,7 +189,7 @@ bool jfin_get_item_parent_id(const jfin_session_t *session, const char *item_id,
  * Used to find adjacent episodes for "queue next" downloads.
  */
 bool jfin_get_siblings(const jfin_session_t *session, const char *parent_id,
-                       int limit, jfin_item_list_t *out);
+                       int start_index, int limit, jfin_item_list_t *out);
 
 /* ── Streaming ─────────────────────────────────────────────────────── */
 

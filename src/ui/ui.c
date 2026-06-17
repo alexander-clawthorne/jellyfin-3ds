@@ -1349,7 +1349,10 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                                                 xparent, sizeof(xparent));
                     if (xparent[0]) {
                         static jfin_item_list_t s_sibs;
-                        if (jfin_get_siblings(session, xparent, JFIN_MAX_ITEMS, &s_sibs)) {
+                        int sib_start = state->now_playing.index_number > 1
+                                        ? state->now_playing.index_number - 1 : 0;
+                        if (jfin_get_siblings(session, xparent, sib_start,
+                                              JFIN_MAX_ITEMS, &s_sibs)) {
                             int cur_pos = -1;
                             for (int si = 0; si < s_sibs.count; si++) {
                                 if (strcmp(s_sibs.items[si].id,
@@ -1373,22 +1376,15 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             /* ZL+Y (now-playing): download subtitle .ass for the current episode */
             if ((kdown & KEY_Y) && (kheld & KEY_ZL) && state->has_now_playing
                     && state->now_playing.id[0] && session->authenticated) {
-                int sub_idx = state->subtitle_stream_index;
+                int sub_idx = -1;
                 char sub_lang[8] = "";
-                if (sub_idx >= 0 && state->subtitle_list_loaded) {
-                    for (int si = 0; si < state->subtitle_list.count; si++) {
-                        if (state->subtitle_list.subs[si].index == sub_idx) {
-                            strncpy(sub_lang, state->subtitle_list.subs[si].language, 7);
-                            break;
-                        }
-                    }
-                } else if (sub_idx < 0) {
-                    jfin_subtitle_list_t tmp_subs;
-                    if (jfin_get_subtitle_streams(session, state->now_playing.id, &tmp_subs)
-                            && tmp_subs.count > 0) {
-                        sub_idx = tmp_subs.subs[0].index;
-                        strncpy(sub_lang, tmp_subs.subs[0].language, 7);
-                    }
+                /* Always fetch fresh — subtitle_stream_index may be stale from a
+                 * different episode or a previous online session. */
+                jfin_subtitle_list_t tmp_subs;
+                if (jfin_get_subtitle_streams(session, state->now_playing.id, &tmp_subs)
+                        && tmp_subs.count > 0) {
+                    sub_idx = tmp_subs.subs[0].index;
+                    strncpy(sub_lang, tmp_subs.subs[0].language, 7);
                 }
                 if (sub_idx >= 0) {
                     jfin_stream_t sub_stream;
@@ -1826,6 +1822,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                         if (e->item_id[0])
                             strncpy(state->now_playing.id, e->item_id,
                                     sizeof(state->now_playing.id) - 1);
+                        state->now_playing.index_number = e->ep_num;
                         state->previous_view = state->current_view;
                         state->current_view  = VIEW_NOW_PLAYING;
                     }

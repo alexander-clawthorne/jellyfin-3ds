@@ -525,14 +525,16 @@ bool jfin_get_item_parent_id(const jfin_session_t *session, const char *item_id,
 }
 
 bool jfin_get_siblings(const jfin_session_t *session, const char *parent_id,
-                       int limit, jfin_item_list_t *out)
+                       int start_index, int limit, jfin_item_list_t *out)
 {
     char url[JFIN_URL_BUF];
-    snprintf(url, sizeof(url),
+    int ulen = snprintf(url, sizeof(url),
              "%s/Users/%s/Items?ParentId=%s&Limit=%d"
              "&SortBy=IndexNumber&SortOrder=Ascending"
              "&Fields=PrimaryImageAspectRatio,BasicSyncInfo,ParentId",
              session->server_url, session->user_id, parent_id, limit);
+    if (start_index > 0 && ulen > 0 && ulen < (int)sizeof(url) - 24)
+        snprintf(url + ulen, sizeof(url) - ulen, "&StartIndex=%d", start_index);
     cJSON *json = api_get(session, url);
     if (!json) return false;
     parse_item_list(json, out);
