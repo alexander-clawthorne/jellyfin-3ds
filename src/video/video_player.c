@@ -700,12 +700,25 @@ static void decode_thread_func(void *arg)
 
     /* Main decode loop */
     AVPacket *pkt = av_packet_alloc();
-    if (!pkt) return;
+    if (!pkt) { log_write("DEC: av_packet_alloc FAILED"); return; }
 
+    log_write("DEC: loop start");
+    bool first_pkt = true;
     while (!s_vp.stop_requested) {
         bool is_video = false;
         int ret = demux_read_packet(&s_vp.demux, pkt, &is_video);
-        if (ret < 0) break; /* EOF or error */
+        if (first_pkt) {
+            first_pkt = false;
+            log_write("DEC: first pkt ret=%d is_video=%d size=%d",
+                      ret, (int)is_video, (ret >= 0 && pkt) ? pkt->size : 0);
+        }
+        if (ret < 0) {
+            log_write("DEC: loop break ret=%d ring_fill=%d finished=%d",
+                      ret,
+                      __atomic_load_n(&s_vp.demux.ring_fill, __ATOMIC_ACQUIRE),
+                      __atomic_load_n(&s_vp.demux.ring_finished, __ATOMIC_ACQUIRE));
+            break;
+        }
 
         if (is_video) {
             bool got_frame = mvd_decode_packet(&s_vp.mvd, pkt->data, pkt->size);
