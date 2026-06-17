@@ -743,8 +743,23 @@ static void decode_thread_func(void *arg)
         if (is_video) {
             if (first_video_pkt) {
                 first_video_pkt = false;
-                log_write("DEC: first video pkt size=%d (skipped %d audio pre-roll pkts)",
-                          pkt->size, audio_skipped);
+                /* Subtitle-burn streams send audio pre-roll from PTS=0 up to
+                 * approximately the seek position before the first video IDR.
+                 * The first video IDR therefore arrives with PTS ≈ seek_time,
+                 * which would make position_ticks = seek_offset + seek_time ≈ 2×seek.
+                 * Cancel the pre-roll PTS out of seek_offset so that subsequent
+                 * position_ticks = corrected_seek_offset + video_pts = seek_offset. */
+                if (audio_skipped > 0 && pkt->pts != AV_NOPTS_VALUE) {
+                    AVFormatContext *_fmt = (AVFormatContext *)s_vp.demux.fmt_ctx;
+                    AVRational _tb = _fmt->streams[s_vp.demux.video_stream_idx]->time_base;
+                    double first_video_pts = pkt->pts * (double)_tb.num / (double)_tb.den;
+                    s_vp.seek_offset_ticks -= (int64_t)(first_video_pts * 10000000.0);
+                    log_write("DEC: first video pkt size=%d (skipped %d pre-roll pkts, pts=%.3fs, offset adj)",
+                              pkt->size, audio_skipped, first_video_pts);
+                } else {
+                    log_write("DEC: first video pkt size=%d (skipped %d audio pre-roll pkts)",
+                              pkt->size, audio_skipped);
+                }
             }
             got_video = true;
             bool got_frame = mvd_decode_packet(&s_vp.mvd, pkt->data, pkt->size);
