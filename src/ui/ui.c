@@ -250,13 +250,18 @@ static void draw_subtitles_top(void)
         int nlines = 1;
         for (const char *q = s->text; *q; q++) if (*q == '\n') nlines++;
 
-        /* Anchor point in screen coords */
-        float ax = (s->screen_x >= 0.0f) ? s->screen_x : 200.0f;
-        float ay = (s->screen_y >= 0.0f) ? s->screen_y : 226.0f;
-
         /* Vertical placement based on ASS alignment row (1-3=bottom, 4-6=mid, 7-9=top) */
-        float block_h = nlines * SUB_LINE_H;
         int row = (s->alignment - 1) / 3; /* 0=bottom, 1=mid, 2=top */
+
+        /* Anchor point — default depends on row when no explicit \pos */
+        float ax = (s->screen_x >= 0.0f) ? s->screen_x : 200.0f;
+        float ay;
+        if (s->screen_y >= 0.0f) ay = s->screen_y;
+        else if (row == 2)        ay = 8.0f;    /* top */
+        else if (row == 1)        ay = 120.0f;  /* middle */
+        else                      ay = 226.0f;  /* bottom */
+
+        float block_h = nlines * SUB_LINE_H;
         float line_y;
         if (row == 0)      line_y = ay - block_h;          /* bottom-anchored */
         else if (row == 1) line_y = ay - block_h / 2.0f;   /* middle-anchored */
@@ -638,6 +643,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                             video_player_play(stream.url, stream.subtitle_url, item->runtime_ticks, 0, mode_3d)) {
                             state->now_playing_offline = false;
                             state->now_playing_local_path[0] = '\0';
+                            state->now_playing_sub_path[0] = '\0';
                             state->now_playing = *item;
                             state->has_now_playing = true;
                             state->playing_index = state->selected_index;
@@ -808,7 +814,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     }
                     if (jfin_get_video_stream(session, item->id, 0, false, dl_sub_idx, &stream))
                         dl_queue_video(item->id, dl_name, stream.url, dl_sub_lang,
-                                       item->runtime_ticks);
+                                       stream.subtitle_url, item->runtime_ticks);
                 } else if (is_book) {
                     /* Build breadcrumb display name for the book */
                     char book_name[256];
@@ -945,6 +951,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                             /* Clear offline flags so X/seek handlers use the fast online path */
                             state->now_playing_offline = false;
                             state->now_playing_local_path[0] = '\0';
+                            state->now_playing_sub_path[0] = '\0';
                             jfin_report_start(session, next_item->id);
                             album_art_load(session, next_item);
                         } else {
@@ -1091,7 +1098,9 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     if (state->now_playing_offline) {
                         /* Seek by byte offset in local TS file (net_thread estimates position) */
                         state->video_retry_ticks = new_pos;
-                        video_player_play(state->now_playing_local_path, NULL, 0, new_pos, VP_3D_NONE);
+                        video_player_play(state->now_playing_local_path,
+                                          state->now_playing_sub_path[0] ? state->now_playing_sub_path : NULL,
+                                          0, new_pos, VP_3D_NONE);
                     } else {
                         vp_3d_mode_t mode_3d = item_3d_mode(&state->now_playing);
                         state->video_retry_ticks = new_pos;
@@ -1249,7 +1258,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                              cand->series_name, cand->index_number, cand->name); \
                 else snprintf(xname, sizeof(xname), "%s", cand->name);        \
                 dl_queue_video(cand->id, xname, xstream.url, _eff_sub_name,   \
-                               cand->runtime_ticks);                           \
+                               xstream.subtitle_url, cand->runtime_ticks);    \
                 if (cand->index_number > 0)                                    \
                     snprintf(state->np_toast, sizeof(state->np_toast),         \
                              got_sub ? "DL+sub: E%02d - %s"                    \
@@ -1690,6 +1699,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     /* Clear video-specific fields so seek/X handlers don't use stale state */
                     state->now_playing.id[0] = '\0';
                     state->now_playing_local_path[0] = '\0';
+                    state->now_playing_sub_path[0] = '\0';
                     state->video_retry_ticks = 0;
                     state->has_now_playing = true;
                     state->now_playing_offline = true;
@@ -1710,7 +1720,16 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     reader_open_local(e->path);
                 } else {
                     audio_player_stop();
-                    if (video_player_play(e->path, NULL, 0, 0, VP_3D_NONE)) {
+                    /* Look up companion .ass subtitle file (downloaded alongside .ts) */
+                    char loc_sub_path[192] = {0};
+                    if (e->item_id[0]) {
+                        char ass_path[192];
+                        if (cache_path(e->item_id, "ass", ass_path, sizeof(ass_path))) {
+                            FILE *afp = fopen(ass_path, "rb");
+                            if (afp) { fclose(afp); snprintf(loc_sub_path, sizeof(loc_sub_path), "%s", ass_path); }
+                        }
+                    }
+                    if (video_player_play(e->path, loc_sub_path[0] ? loc_sub_path : NULL, 0, 0, VP_3D_NONE)) {
                         strncpy(state->now_playing.name, e->name, sizeof(state->now_playing.name)-1);
                         state->now_playing.name[sizeof(state->now_playing.name)-1] = '\0';
                         state->has_now_playing = true;
@@ -1718,6 +1737,8 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                         state->video_retry_ticks = 0;  /* reset tracked seek position */
                         snprintf(state->now_playing_local_path,
                                  sizeof(state->now_playing_local_path), "%s", e->path);
+                        snprintf(state->now_playing_sub_path,
+                                 sizeof(state->now_playing_sub_path), "%s", loc_sub_path);
                         /* Use item_id stored in dl_entry_t (new cache naming) */
                         state->now_playing.id[0] = '\0';
                         if (e->item_id[0])

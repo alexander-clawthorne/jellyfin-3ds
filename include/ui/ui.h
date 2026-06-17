@@ -119,6 +119,7 @@ typedef struct {
     /* Offline playback (downloaded local file) */
     bool                 now_playing_offline;          /* true when playing from SD card */
     char                 now_playing_local_path[192];  /* sdmc: path of the local .ts file */
+    char                 now_playing_sub_path[192];    /* sdmc: path of companion .ass, or "" */
 
     /* Music playback mode */
     bool  shuffle_mode;  /* pick random next track on auto-advance */

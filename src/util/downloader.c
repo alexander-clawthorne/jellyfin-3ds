@@ -38,6 +38,7 @@ static struct {
     char url[2048];
     char item_name[256];
     char sub_name[128];         /* subtitle track name being burned in */
+    char subtitle_url[2048];    /* ASS subtitle URL to download, "" = none */
     bool is_video;
     int64_t runtime_ticks;      /* item duration for size estimation */
 } s_vdl;
@@ -52,6 +53,7 @@ typedef struct {
     char    item_name[256];
     char    url[2048];
     char    sub_name[128];
+    char    subtitle_url[2048]; /* ASS download URL, "" = none */
     bool    is_video;
     int64_t runtime_ticks;
 } dl_q_item_t;
@@ -218,6 +220,34 @@ static void vdl_thread_func(void *arg)
     FILE *meta = fopen(s_vdl.meta_path, "w");
     if (meta) { fputs(s_vdl.item_name, meta); fclose(meta); }
 
+    /* Download companion ASS subtitle file if a URL was provided */
+    if (s_vdl.subtitle_url[0]) {
+        char ass_path[192];
+        if (cache_path(s_vdl.item_id, "ass", ass_path, sizeof(ass_path))) {
+            CURL *scurl = curl_easy_init();
+            if (scurl) {
+                FILE *afp = fopen(ass_path, "wb");
+                if (afp) {
+                    curl_easy_setopt(scurl, CURLOPT_URL,           s_vdl.subtitle_url);
+                    curl_easy_setopt(scurl, CURLOPT_WRITEFUNCTION, vdl_write_cb);
+                    curl_easy_setopt(scurl, CURLOPT_WRITEDATA,     afp);
+                    curl_easy_setopt(scurl, CURLOPT_FOLLOWLOCATION,1L);
+                    curl_easy_setopt(scurl, CURLOPT_SSL_VERIFYPEER,0L);
+                    curl_easy_setopt(scurl, CURLOPT_TIMEOUT,       30L);
+                    CURLcode src = curl_easy_perform(scurl);
+                    fclose(afp);
+                    if (src == CURLE_OK)
+                        log_write("VDL: saved %s.ass", s_vdl.item_id);
+                    else {
+                        log_write("VDL: ASS download failed: %s", curl_easy_strerror(src));
+                        remove(ass_path);
+                    }
+                }
+                curl_easy_cleanup(scurl);
+            }
+        }
+    }
+
     s_vdl.state = DL_DONE;
     log_write("VDL: saved %s.%s (%zu bytes)", s_vdl.item_id, s_vdl.ext, s_vdl.bytes);
 }
@@ -237,7 +267,7 @@ static void join_thread(void)
 
 bool dl_queue_video(const char *item_id, const char *item_name,
                     const char *url, const char *sub_track_name,
-                    int64_t runtime_ticks)
+                    const char *subtitle_url, int64_t runtime_ticks)
 {
     if (s_q_count >= DL_QUEUE_MAX) return false;
     dl_q_item_t *q = &s_queue[s_q_count++];
@@ -249,6 +279,8 @@ bool dl_queue_video(const char *item_id, const char *item_name,
     q->url[sizeof(q->url)-1] = '\0';
     strncpy(q->sub_name, sub_track_name ? sub_track_name : "", sizeof(q->sub_name)-1);
     q->sub_name[sizeof(q->sub_name)-1] = '\0';
+    strncpy(q->subtitle_url, subtitle_url ? subtitle_url : "", sizeof(q->subtitle_url)-1);
+    q->subtitle_url[sizeof(q->subtitle_url)-1] = '\0';
     strncpy(q->ext, "ts", sizeof(q->ext)-1);
     q->is_video      = true;
     q->runtime_ticks = runtime_ticks;
@@ -311,8 +343,10 @@ void dl_process_queue(void)
     s_vdl.item_name[sizeof(s_vdl.item_name)-1] = '\0';
     strncpy(s_vdl.url,       q->url,        sizeof(s_vdl.url)-1);
     s_vdl.url[sizeof(s_vdl.url)-1] = '\0';
-    strncpy(s_vdl.sub_name,  q->sub_name,   sizeof(s_vdl.sub_name)-1);
+    strncpy(s_vdl.sub_name,    q->sub_name,    sizeof(s_vdl.sub_name)-1);
     s_vdl.sub_name[sizeof(s_vdl.sub_name)-1] = '\0';
+    strncpy(s_vdl.subtitle_url, q->subtitle_url, sizeof(s_vdl.subtitle_url)-1);
+    s_vdl.subtitle_url[sizeof(s_vdl.subtitle_url)-1] = '\0';
     s_vdl.is_video      = q->is_video;
     s_vdl.runtime_ticks = q->runtime_ticks;
 

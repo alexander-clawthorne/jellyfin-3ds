@@ -1147,6 +1147,49 @@ static void subtitle_parse_ass(const char *text)
     p = strstr(text, "PlayResY:");
     if (p) play_res_y = (float)atoi(p + 9);
 
+    /* Parse [V4+ Styles] to get name→alignment defaults */
+    typedef struct { char name[64]; int align; } style_entry_t;
+    style_entry_t styles[32];
+    int style_count = 0;
+    int align_col = 18; /* default column index for Alignment in Format line */
+
+    const char *fmt = strstr(text, "\nFormat:");
+    if (fmt) {
+        fmt += 8;
+        int col = 0;
+        const char *fp = fmt;
+        while (*fp && *fp != '\n') {
+            while (*fp == ' ') fp++;
+            if (strncmp(fp, "Alignment", 9) == 0 &&
+                (fp[9] == ',' || fp[9] == '\n' || fp[9] == '\r' || fp[9] == ' '))
+                align_col = col;
+            col++;
+            while (*fp && *fp != ',' && *fp != '\n') fp++;
+            if (*fp == ',') fp++;
+        }
+    }
+    p = text;
+    while ((p = strstr(p, "\nStyle:")) != NULL && style_count < 32) {
+        p += 7;
+        while (*p == ' ') p++;
+        const char *eol = strchr(p, '\n');
+        const char *comma = strchr(p, ',');
+        if (!comma || (eol && comma > eol)) { p++; continue; }
+        int nlen = (int)(comma - p);
+        if (nlen >= 64) nlen = 63;
+        style_entry_t *se = &styles[style_count];
+        memcpy(se->name, p, nlen); se->name[nlen] = '\0';
+        se->align = 2;
+        const char *sp = comma + 1;
+        for (int c = 1; sp && *sp; c++) {
+            if (c == align_col) { se->align = atoi(sp); break; }
+            sp = strchr(sp, ',');
+            if (sp) sp++;
+        }
+        style_count++;
+        p++;
+    }
+
     /* Count Dialogue lines to pre-allocate */
     int count = 0;
     p = text;
@@ -1165,14 +1208,15 @@ static void subtitle_parse_ass(const char *text)
 
         /* Skip "Dialogue: " (10 chars) and split first 9 commas */
         const char *fp = p + 10;
-        char start_ts[16] = {0}, end_ts[16] = {0};
+        char start_ts[16] = {0}, end_ts[16] = {0}, style_name[64] = {0};
         int fi;
         for (fi = 0; fi < 9 && fp && *fp; fi++) {
             const char *comma = strchr(fp, ',');
             if (!comma || (eol && comma > eol)) break;
             int n = (int)(comma - fp);
-            if (fi == 1 && n < 16) { memcpy(start_ts, fp, n); start_ts[n] = '\0'; }
-            if (fi == 2 && n < 16) { memcpy(end_ts,   fp, n); end_ts[n]   = '\0'; }
+            if (fi == 1 && n < 16) { memcpy(start_ts,   fp, n); start_ts[n]   = '\0'; }
+            if (fi == 2 && n < 16) { memcpy(end_ts,     fp, n); end_ts[n]     = '\0'; }
+            if (fi == 3 && n < 64) { memcpy(style_name, fp, n); style_name[n] = '\0'; }
             fp = comma + 1;
         }
         if (fi < 9 || !fp) continue;           /* malformed line */
@@ -1192,6 +1236,14 @@ static void subtitle_parse_ass(const char *text)
         e->screen_y    = -1.0f;
         e->alignment   = 2;
         e->color       = 0;
+
+        /* Default alignment from style definition */
+        for (int si = 0; si < style_count; si++) {
+            if (strcmp(styles[si].name, style_name) == 0) {
+                e->alignment = styles[si].align;
+                break;
+            }
+        }
 
         float raw_x = -1.0f, raw_y = -1.0f;
         ass_strip_tags(tmp, e->text, sizeof(e->text), &raw_x, &raw_y,
@@ -1216,6 +1268,25 @@ static void subtitle_load(const char *url)
     s_vp.subtitle_count = 0;
 
     if (!url || !url[0]) return;
+
+    /* Local file path (offline downloaded .ass) */
+    if (strncmp(url, "sdmc:/", 6) == 0) {
+        FILE *fp = fopen(url, "rb");
+        if (!fp) { log_write("SUB: local open failed: %s", url); return; }
+        fseek(fp, 0, SEEK_END);
+        long fsz = ftell(fp);
+        rewind(fp);
+        if (fsz <= 0 || fsz > 2 * 1024 * 1024) { fclose(fp); return; }
+        char *data = malloc((size_t)fsz + 1);
+        if (!data) { fclose(fp); return; }
+        size_t rd = fread(data, 1, (size_t)fsz, fp);
+        fclose(fp);
+        data[rd] = '\0';
+        log_write("SUB: local read %zu bytes", rd);
+        subtitle_parse_ass(data);
+        free(data);
+        return;
+    }
 
     CURL *curl = curl_easy_init();
     if (!curl) return;
