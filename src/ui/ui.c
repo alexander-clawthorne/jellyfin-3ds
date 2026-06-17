@@ -2101,7 +2101,7 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     bool is_video = (vstatus.state != VIDEO_STOPPED);
 
     /* Top screen */
-    C2D_TargetClear(s_top, rgba(COLOR_BG_DARK));
+    C2D_TargetClear(s_top, bg_color());
     C2D_SceneBegin(s_top);
 
     if (!state->has_now_playing) {
@@ -2249,9 +2249,13 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     /* Subtitle status */
     if (is_video) {
         char sub_str[64];
+        bool subs_active;
         if (state->now_playing_offline) {
-            snprintf(sub_str, sizeof(sub_str), "Subs: Encoded at download");
+            subs_active = state->offline_subs_on;
+            snprintf(sub_str, sizeof(sub_str), "Subs: %s",
+                     state->offline_subs_on ? "on" : "off");
         } else if (state->subtitle_stream_index >= 0) {
+            subs_active = true;
             const char *label = state->subtitle_lang_pref[0]
                                 ? state->subtitle_lang_pref : "on";
             for (int si = 0; si < state->subtitle_list.count; si++) {
@@ -2264,11 +2268,11 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
             snprintf(sub_str, sizeof(sub_str), "Subs: %s%s",
                      label, state->subtitle_sticky ? " (sticky)" : "");
         } else {
-            snprintf(sub_str, sizeof(sub_str), "Subs: Off");
+            subs_active = false;
+            snprintf(sub_str, sizeof(sub_str), "Subs: off");
         }
-        draw_text(30, 145, 0.4f, rgba(
-            state->subtitle_stream_index >= 0 ? COLOR_ACCENT : COLOR_TEXT_SECONDARY),
-            sub_str);
+        draw_text(30, 145, 0.4f, rgba(subs_active ? COLOR_ACCENT : COLOR_TEXT_SECONDARY),
+                  sub_str);
     }
 
     /* Shuffle/repeat status (audio only) */
@@ -2287,15 +2291,18 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     if (state->np_toast_timer > 0)
         draw_text(10, 163, 0.42f, rgba(COLOR_ACCENT), state->np_toast);
 
-    /* Controls hint */
-    const char *ctl_hint;
-    if (!is_video)
-        ctl_hint = "A:Pause B:Back STR:Stop ZL/ZR:Skip Y:Shuf SEL:Rep";
-    else if (state->now_playing_offline)
-        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek X:DLnxt ZL+X:+sub ZL+Y:DLsub";
-    else
-        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek Y:Subs X:DLnxt ZL+X:+sub ZL+Y:DLsub";
-    draw_text(10, 180, 0.4f, rgba(COLOR_TEXT_PRIMARY), ctl_hint);
+    /* Controls hint — two lines for video to fit all bindings */
+    if (!is_video) {
+        draw_text(10, 180, 0.4f, rgba(COLOR_TEXT_PRIMARY),
+                  "A:Pause B:Back STR:Stop ZL/ZR:Skip Y:Shuf SEL:Rep");
+    } else {
+        const char *line1 = state->now_playing_offline
+            ? "A:Pause B:Back STR:Stop L/R:Seek Y:sub"
+            : "A:Pause B:Back STR:Stop L/R:Seek Y:Subs";
+        draw_text(10, 177, 0.4f, rgba(COLOR_TEXT_PRIMARY), line1);
+        draw_text(10, 191, 0.4f, rgba(COLOR_TEXT_PRIMARY),
+                  "X:DLnxt  ZL+X:DL+sub  ZL+Y:DLsub");
+    }
 }
 
 void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
