@@ -41,7 +41,7 @@ void reader_cleanup(void);
 
 /**
  * Start an async download of item_id's CBZ from Jellyfin.
- * Saves to sdmc:/3ds/jellyfin-3ds/book.cbz, then parses the ZIP.
+ * Saves to the cache directory as ITEMID.cbz, then parses the ZIP.
  * State advances to READER_READY (or READER_ERROR) on completion.
  * If a download is already running, it is cancelled first.
  */
@@ -49,7 +49,7 @@ void reader_open_book(const jfin_session_t *session, const char *item_id);
 
 /**
  * Open a local CBZ file directly (no download needed).
- * path is the full SD card path (e.g. sdmc:/3ds/jellyfin-3ds/cbz_ITEMID.cbz).
+ * path is the full SD card path (e.g. sdmc:/3ds/jellyfin-3ds/cache/ITEMID.cbz).
  * State advances to READER_READY (or READER_ERROR).
  */
 void reader_open_local(const char *path);

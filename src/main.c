@@ -20,7 +20,9 @@
 #include "video/video_player.h"
 #include "ui/ui.h"
 #include "ui/reader.h"
+#include "util/cache.h"
 #include "util/config.h"
+#include "util/downloader.h"
 #include "util/log.h"
 
 /* Target 30fps — sufficient for a media browser UI */
@@ -87,6 +89,7 @@ int main(int argc, char *argv[])
     /* Load config */
     config_load(&g_config);
     config_ensure_device_id(&g_config);
+    cache_init(); /* index offline downloads, sweep stale .part files */
 
     /* Init subsystems — if any fail, exit gracefully */
     if (!jfin_init() || !audio_player_init() || !ui_init()) {
@@ -94,7 +97,7 @@ int main(int argc, char *argv[])
         return 1;
     }
     video_player_init(); /* optional — fails gracefully on Old 3DS */
-    reader_init();       /* optional — fails gracefully on OOM */
+    reader_init();       /* allocate GPU texture for manga/CBZ reader */
 
     /* Try restoring previous session */
     memset(&s_session, 0, sizeof(s_session));
@@ -130,14 +133,16 @@ int main(int argc, char *argv[])
         touchPosition touch;
         hidTouchRead(&touch);
 
-        /* Exit on START (reader: split toggle; now-playing: stop media) */
-        if ((kdown & KEY_START) && s_ui.current_view != VIEW_READER &&
-                s_ui.current_view != VIEW_NOW_PLAYING)
+        /* Exit on START — only from menu views; player/reader handle START themselves */
+        if (kdown & KEY_START &&
+            s_ui.current_view != VIEW_NOW_PLAYING &&
+            s_ui.current_view != VIEW_READER)
             break;
 
         /* Update */
         ui_update(&s_ui, &s_session, kdown, kheld, touch);
         audio_player_update();
+        dl_process_queue(); /* advance queue after DL_DONE / DL_ERROR */
 
         /* Render */
         player_status_t pstatus = audio_player_get_status();
@@ -156,6 +161,7 @@ int main(int argc, char *argv[])
         config_save(&g_config);
     }
 
+    reader_cleanup();
     video_player_stop();
     video_player_cleanup();
     reader_cleanup();
