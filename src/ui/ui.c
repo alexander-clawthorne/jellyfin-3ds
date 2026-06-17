@@ -24,6 +24,7 @@
 #include "ui/reader.h"
 #include "util/config.h"
 #include "util/downloader.h"
+#include "util/cache.h"
 #include "util/log.h"
 
 extern jfin_config_t g_config;
@@ -63,14 +64,15 @@ static u32 bg_color(void)
 #define MAX_DL_ENTRIES 64
 
 typedef struct {
-    char name[128];   /* display name */
-    char path[192];   /* full path for deletion */
-    size_t sz;        /* bytes */
-    bool is_video;
-    int  dl_type;     /* 0=video, 1=cbz, 2=audio */
-    char series[64];  /* series/album name for sorting */
-    int  season_num;  /* season or volume number */
-    int  ep_num;      /* episode or chapter number */
+    char   item_id[80];  /* item id for cache_remove() */
+    char   name[128];    /* display name */
+    char   path[192];    /* full path for deletion */
+    size_t sz;           /* bytes */
+    bool   is_video;
+    int    dl_type;      /* 0=video, 1=cbz, 2=audio */
+    char   series[64];   /* series/album name for sorting */
+    int    season_num;   /* season or volume number */
+    int    ep_num;       /* episode or chapter number */
 } dl_entry_t;
 
 static dl_entry_t s_dl_entries[MAX_DL_ENTRIES];
@@ -131,7 +133,7 @@ static int dl_entry_cmp(const void *a, const void *b)
 static void dl_manager_scan(void)
 {
     s_dl_count = 0;
-    DIR *d = opendir(VDL_DIR);
+    DIR *d = opendir(CACHE_DIR);
     if (!d) return;
 
     struct dirent *de;
@@ -139,27 +141,39 @@ static void dl_manager_scan(void)
         const char *n = de->d_name;
         int nlen = (int)strlen(n);
 
-        bool is_cbz   = (strncmp(n, "cbz_",   4) == 0 && nlen > 8  &&
-                         strcmp(n + nlen - 4, ".cbz") == 0);
-        bool is_vid   = (strncmp(n, "video_", 6) == 0 && nlen > 9  &&
-                         strcmp(n + nlen - 3, ".ts") == 0);
-        bool is_audio = (strncmp(n, "audio_", 6) == 0 && nlen > 10 &&
-                         strcmp(n + nlen - 4, ".mp3") == 0);
-        if (!is_cbz && !is_vid && !is_audio) continue;
+        /* Skip hidden, .part files, and .txt companion files */
+        if (n[0] == '.') continue;
+        if (nlen > 5 && strcmp(n + nlen - 5, ".part") == 0) continue;
+        if (nlen > 4 && strcmp(n + nlen - 4, ".txt")  == 0) continue;
+
+        /* Detect type by extension: ITEMID.ts / .cbz / .mp3 */
+        bool is_vid   = (nlen > 3 && strcmp(n + nlen - 3, ".ts")  == 0);
+        bool is_cbz   = (nlen > 4 && strcmp(n + nlen - 4, ".cbz") == 0);
+        bool is_audio = (nlen > 4 && strcmp(n + nlen - 4, ".mp3") == 0);
+        if (!is_vid && !is_cbz && !is_audio) continue;
 
         dl_entry_t *e = &s_dl_entries[s_dl_count++];
         e->is_video = is_vid;
         e->dl_type  = is_vid ? 0 : (is_cbz ? 1 : 2);
 
-        snprintf(e->path, sizeof(e->path), "%s/%s", VDL_DIR, n);
+        snprintf(e->path, sizeof(e->path), "%s/%s", CACHE_DIR, n);
+
+        /* Strip extension to get item_id */
+        int ext_len = is_vid ? 3 : 4;
+        int id_len  = nlen - ext_len;
+        if (id_len > 0 && id_len < (int)sizeof(e->item_id)) {
+            memcpy(e->item_id, n, (size_t)id_len);
+            e->item_id[id_len] = '\0';
+        } else {
+            e->item_id[0] = '\0';
+        }
 
         struct stat st;
         e->sz = (stat(e->path, &st) == 0) ? (size_t)st.st_size : 0;
 
-        /* Try companion title .txt (strip extension, append .txt) */
-        char txt[192];
-        int strip = is_vid ? 3 : 4; /* .ts=3, .cbz=.mp3=4 */
-        snprintf(txt, sizeof(txt), "%s/%.*s.txt", VDL_DIR, nlen - strip, n);
+        /* Try companion .txt: CACHE_DIR/ITEMID.txt */
+        char txt[208];
+        snprintf(txt, sizeof(txt), "%s/%s.txt", CACHE_DIR, e->item_id);
         FILE *f = fopen(txt, "r");
         if (f) {
             if (fgets(e->name, sizeof(e->name), f)) {
@@ -169,13 +183,7 @@ static void dl_manager_scan(void)
             }
             fclose(f);
         } else {
-            /* Fallback: derive from filename */
-            int prefix = is_vid ? 6 : 4; /* "video_"=6, "cbz_"=4, "audio_"=6 */
-            if (is_audio) prefix = 6;
-            int id_len = nlen - prefix - strip;
-            const char *label = is_vid ? "video" : (is_cbz ? "book" : "audio");
-            snprintf(e->name, sizeof(e->name), "%s %.*s", label,
-                     id_len > 20 ? 20 : id_len, n + prefix);
+            snprintf(e->name, sizeof(e->name), "%s", e->item_id);
         }
 
         dl_parse_metadata(e);
@@ -189,15 +197,16 @@ static void dl_manager_scan(void)
 static void dl_manager_delete(int idx)
 {
     if (idx < 0 || idx >= s_dl_count) return;
-    remove(s_dl_entries[idx].path);
-    /* Also remove companion .txt */
-    const char *p = s_dl_entries[idx].path;
-    int plen = (int)strlen(p);
-    char txt[196];
-    if (s_dl_entries[idx].is_video)
-        snprintf(txt, sizeof(txt), "%.*s.txt", plen - 3, p); /* strip .ts, add .txt */
+    dl_entry_t *e = &s_dl_entries[idx];
+    /* Remove file via cache (also removes from in-memory index) */
+    const char *ext = e->is_video ? "ts" : (e->dl_type == 1 ? "cbz" : "mp3");
+    if (e->item_id[0])
+        cache_remove(e->item_id, ext);
     else
-        snprintf(txt, sizeof(txt), "%.*s.txt", plen - 4, p); /* strip .cbz, add .txt */
+        remove(e->path);
+    /* Remove companion .txt */
+    char txt[208];
+    snprintf(txt, sizeof(txt), "%s/%s.txt", CACHE_DIR, e->item_id);
     remove(txt);
 }
 
@@ -220,6 +229,85 @@ static void draw_text(float x, float y, float size, u32 color, const char *text)
 static void draw_rect(float x, float y, float w, float h, u32 color)
 {
     C2D_DrawRectSolid(x, y, 0.0f, w, h, color);
+}
+
+#define SUB_SCALE 0.55f
+#define SUB_LINE_H 14.0f
+
+static void draw_subtitles_top(void)
+{
+    vp_subtitle_t subs[4];
+    int sub_count = video_player_get_subtitles(subs, 4);
+    if (!sub_count) return;
+
+    u32 outline = C2D_Color32(0, 0, 0, 200);
+
+    for (int si = 0; si < sub_count; si++) {
+        const vp_subtitle_t *s = &subs[si];
+        u32 fg = s->color ? s->color : C2D_Color32(255, 255, 255, 255);
+
+        /* Count lines to compute total text block height */
+        int nlines = 1;
+        for (const char *q = s->text; *q; q++) if (*q == '\n') nlines++;
+
+        /* Vertical placement based on ASS alignment row (1-3=bottom, 4-6=mid, 7-9=top) */
+        int row = (s->alignment - 1) / 3; /* 0=bottom, 1=mid, 2=top */
+
+        /* Anchor point — default depends on row when no explicit \pos */
+        float ax = (s->screen_x >= 0.0f) ? s->screen_x : 200.0f;
+        float ay;
+        if (s->screen_y >= 0.0f) ay = s->screen_y;
+        else if (row == 2)        ay = 8.0f;    /* top */
+        else if (row == 1)        ay = 120.0f;  /* middle */
+        else                      ay = 226.0f;  /* bottom */
+
+        float block_h = nlines * SUB_LINE_H;
+        float line_y;
+        if (row == 0)      line_y = ay - block_h;          /* bottom-anchored */
+        else if (row == 1) line_y = ay - block_h / 2.0f;   /* middle-anchored */
+        else               line_y = ay;                     /* top-anchored */
+
+        /* Split text on '\n' and render each line */
+        const char *lp = s->text;
+        while (lp && *lp) {
+            const char *nl = strchr(lp, '\n');
+            int ll = nl ? (int)(nl - lp) : (int)strlen(lp);
+
+            char lbuf[260];
+            if (ll >= (int)sizeof(lbuf)) ll = sizeof(lbuf) - 1;
+            memcpy(lbuf, lp, ll);
+            lbuf[ll] = '\0';
+
+            C2D_Text ct;
+            C2D_TextParse(&ct, s_text_buf, lbuf);
+            C2D_TextOptimize(&ct);
+
+            float tw = 0, th = 0;
+            C2D_TextGetDimensions(&ct, SUB_SCALE, SUB_SCALE, &tw, &th);
+            (void)th;
+
+            /* Horizontal placement */
+            int col = (s->alignment - 1) % 3; /* 0=left, 1=center, 2=right */
+            float lx;
+            if (col == 0)      lx = ax;
+            else if (col == 1) lx = ax - tw / 2.0f;
+            else               lx = ax - tw;
+
+            /* Clamp to screen */
+            if (lx < 2.0f) lx = 2.0f;
+            if (lx + tw > 398.0f) lx = 398.0f - tw;
+
+            /* Outline then fill */
+            C2D_DrawText(&ct, C2D_WithColor, lx-1, line_y-1, 0.5f, SUB_SCALE, SUB_SCALE, outline);
+            C2D_DrawText(&ct, C2D_WithColor, lx+1, line_y-1, 0.5f, SUB_SCALE, SUB_SCALE, outline);
+            C2D_DrawText(&ct, C2D_WithColor, lx-1, line_y+1, 0.5f, SUB_SCALE, SUB_SCALE, outline);
+            C2D_DrawText(&ct, C2D_WithColor, lx+1, line_y+1, 0.5f, SUB_SCALE, SUB_SCALE, outline);
+            C2D_DrawText(&ct, C2D_WithColor, lx,   line_y,   0.5f, SUB_SCALE, SUB_SCALE, fg);
+
+            line_y += SUB_LINE_H;
+            lp = nl ? nl + 1 : NULL;
+        }
+    }
 }
 
 static void format_ticks(int64_t ticks, char *out, int out_len)
@@ -552,9 +640,10 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                                                   mode_3d != VP_3D_NONE,
                                                   state->subtitle_stream_index,
                                                   &stream) &&
-                            video_player_play(stream.url, item->runtime_ticks, 0, mode_3d)) {
+                            video_player_play(stream.url, stream.subtitle_url, item->runtime_ticks, 0, mode_3d)) {
                             state->now_playing_offline = false;
                             state->now_playing_local_path[0] = '\0';
+                            state->now_playing_sub_path[0] = '\0';
                             state->now_playing = *item;
                             state->has_now_playing = true;
                             state->playing_index = state->selected_index;
@@ -607,8 +696,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     /* Save companion .txt so downloads manager shows a readable name */
                     {
                         char cbz_meta[192];
-                        snprintf(cbz_meta, sizeof(cbz_meta),
-                                 VDL_DIR "/cbz_%s.txt", item->id);
+                        cache_path(item->id, "txt", cbz_meta, sizeof(cbz_meta));
                         FILE *mf = fopen(cbz_meta, "w");
                         if (mf) {
                             for (int _d = 1; _d < state->parent_depth; _d++)
@@ -726,7 +814,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     }
                     if (jfin_get_video_stream(session, item->id, 0, false, dl_sub_idx, &stream))
                         dl_queue_video(item->id, dl_name, stream.url, dl_sub_lang,
-                                       item->runtime_ticks);
+                                       stream.subtitle_url, item->runtime_ticks);
                 } else if (is_book) {
                     /* Build breadcrumb display name for the book */
                     char book_name[256];
@@ -775,8 +863,40 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 }
             }
         }
+        /* ZL+Y: download just the subtitle (.ass) for the hovered video item */
+        if ((kdown & KEY_Y) && (kheld & KEY_ZL)
+                && state->selected_index < state->items.count
+                && session->authenticated) {
+            jfin_item_t *item = &state->items.items[state->selected_index];
+            if (item->type == JFIN_ITEM_EPISODE || item->type == JFIN_ITEM_MOVIE) {
+                int sub_idx = -1;
+                char sub_lang[8] = "";
+                if (state->subtitle_list_loaded && state->subtitle_list.count > 0) {
+                    sub_idx = state->subtitle_list.subs[0].index;
+                    strncpy(sub_lang, state->subtitle_list.subs[0].language, 7);
+                } else {
+                    jfin_subtitle_list_t tmp_subs;
+                    if (jfin_get_subtitle_streams(session, item->id, &tmp_subs)
+                            && tmp_subs.count > 0) {
+                        sub_idx = tmp_subs.subs[0].index;
+                        strncpy(sub_lang, tmp_subs.subs[0].language, 7);
+                    }
+                }
+                if (sub_idx >= 0) {
+                    jfin_stream_t sub_stream;
+                    if (jfin_get_video_stream(session, item->id, 0, false,
+                                              sub_idx, &sub_stream)
+                            && sub_stream.subtitle_url[0]) {
+                        char dl_name[256];
+                        snprintf(dl_name, sizeof(dl_name), "%s", item->name);
+                        if (dl_queue_subtitle_only(item->id, dl_name, sub_stream.subtitle_url))
+                            log_write("UI: queued sub-only for %s (%s)", item->id, sub_lang);
+                    }
+                }
+            }
+        }
         /* Y to toggle now-playing view */
-        if ((kdown & KEY_Y) && state->has_now_playing) {
+        if ((kdown & KEY_Y) && !(kheld & KEY_ZL) && state->has_now_playing) {
             state->previous_view = state->current_view;
             state->current_view = VIEW_NOW_PLAYING;
         }
@@ -844,7 +964,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                                                       next_mode != VP_3D_NONE,
                                                       state->subtitle_stream_index,
                                                       &stream) &&
-                                video_player_play(stream.url, next_item->runtime_ticks, 0, next_mode)) {
+                                video_player_play(stream.url, stream.subtitle_url, next_item->runtime_ticks, 0, next_mode)) {
                                 started = true;
                             } else if (jfin_get_audio_stream(session, next_item->id, 0, &stream)) {
                                 audio_player_play(stream.url, next_item->runtime_ticks, 0);
@@ -860,6 +980,10 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                             state->now_playing = *next_item;
                             state->playing_index = next;
                             state->auto_stopped = false;
+                            /* Clear offline flags so X/seek handlers use the fast online path */
+                            state->now_playing_offline = false;
+                            state->now_playing_local_path[0] = '\0';
+                            state->now_playing_sub_path[0] = '\0';
                             jfin_report_start(session, next_item->id);
                             album_art_load(session, next_item);
                         } else {
@@ -911,7 +1035,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                                                       retry_mode != VP_3D_NONE,
                                                       state->subtitle_stream_index,
                                                       &retry_stream))
-                                video_player_play(retry_stream.url,
+                                video_player_play(retry_stream.url, retry_stream.subtitle_url,
                                                   state->now_playing.runtime_ticks,
                                                   state->video_retry_ticks,
                                                   retry_mode);
@@ -934,7 +1058,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                                               fb_mode != VP_3D_NONE,
                                               -1,
                                               &fb_stream))
-                        video_player_play(fb_stream.url,
+                        video_player_play(fb_stream.url, NULL,
                                           state->now_playing.runtime_ticks,
                                           state->video_retry_ticks,
                                           fb_mode);
@@ -1006,7 +1130,10 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     if (state->now_playing_offline) {
                         /* Seek by byte offset in local TS file (net_thread estimates position) */
                         state->video_retry_ticks = new_pos;
-                        video_player_play(state->now_playing_local_path, 0, new_pos, VP_3D_NONE);
+                        const char *seek_sub = (state->offline_subs_on && state->now_playing_sub_path[0])
+                                               ? state->now_playing_sub_path : NULL;
+                        video_player_play(state->now_playing_local_path, seek_sub,
+                                          0, new_pos, VP_3D_NONE);
                     } else {
                         vp_3d_mode_t mode_3d = item_3d_mode(&state->now_playing);
                         state->video_retry_ticks = new_pos;
@@ -1014,13 +1141,26 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                                                   mode_3d != VP_3D_NONE,
                                                   state->subtitle_stream_index,
                                                   &stream))
-                            video_player_play(stream.url, state->now_playing.runtime_ticks, new_pos, mode_3d);
+                            video_player_play(stream.url, stream.subtitle_url, state->now_playing.runtime_ticks, new_pos, mode_3d);
                     }
                 } else {
-                    audio_player_stop();
-                    if (jfin_get_audio_stream(session, state->now_playing.id, new_pos, &stream))
-                        audio_player_play(stream.url, state->now_playing.runtime_ticks, new_pos);
+                    /* Audio seek: only call Jellyfin for online streams.
+                     * For offline (local MP3), seeking is not yet supported. */
+                    if (!state->now_playing_offline) {
+                        audio_player_stop();
+                        if (jfin_get_audio_stream(session, state->now_playing.id, new_pos, &stream))
+                            audio_player_play(stream.url, state->now_playing.runtime_ticks, new_pos);
+                    }
                 }
+            }
+            /* Y (video offline): toggle subtitle display on/off */
+            if ((kdown & KEY_Y) && vid_active && state->now_playing_offline
+                && state->now_playing_sub_path[0]) {
+                state->offline_subs_on = !state->offline_subs_on;
+                if (state->offline_subs_on)
+                    video_player_load_subtitles(state->now_playing_sub_path);
+                else
+                    video_player_clear_subtitles();
             }
             /* Y (video online): cycle subtitle tracks */
             if ((kdown & KEY_Y) && vid_active && !state->now_playing_offline) {
@@ -1070,7 +1210,8 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 if (jfin_get_video_stream(session, state->now_playing.id, resume_ticks,
                                           sub_mode != VP_3D_NONE,
                                           state->subtitle_stream_index, &sub_stream))
-                    video_player_play(sub_stream.url, state->now_playing.runtime_ticks,
+                    video_player_play(sub_stream.url, sub_stream.subtitle_url,
+                                      state->now_playing.runtime_ticks,
                                       resume_ticks, sub_mode);
             }
             /* Y (audio): toggle shuffle */
@@ -1107,8 +1248,10 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     (vid_active || state->now_playing_local_path[0]) &&
                     session->authenticated) {
                 bool with_subs = (kheld & KEY_ZL) != 0;
-                /* sub_idx: prefer current active track; -1 means "look up per-candidate" */
-                int  sub_idx   = with_subs ? state->subtitle_stream_index : -1;
+                /* sub_idx: prefer current active track; -1 forces per-candidate lookup.
+                 * Offline: subtitle_stream_index is stale, always force lookup. */
+                int sub_idx = (with_subs && !state->now_playing_offline)
+                              ? state->subtitle_stream_index : -1;
                 const char *sub_name = (with_subs && state->subtitle_lang_pref[0])
                                        ? state->subtitle_lang_pref : NULL;
 
@@ -1118,11 +1261,8 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             jfin_item_t *cand = &(list_ptr)[_i];                               \
             if (cand->type != JFIN_ITEM_EPISODE &&                             \
                 cand->type != JFIN_ITEM_MOVIE) continue;                       \
-            char chk[208];                                                     \
-            snprintf(chk, sizeof(chk), VDL_DIR "/video_%s.ts", cand->id);     \
-            FILE *_cf = fopen(chk, "rb");                                      \
-            bool already = (_cf != NULL) || dl_queue_has_video(cand->id);      \
-            if (_cf) fclose(_cf);                                              \
+            bool already = cache_has(cand->id, "ts") ||                        \
+                           dl_queue_has_video(cand->id);                       \
             if (already) continue;                                             \
             /* When ZL+X but no sub currently active, look up subs for cand */\
             int _eff_sub = sub_idx;                                            \
@@ -1162,7 +1302,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                              cand->series_name, cand->index_number, cand->name); \
                 else snprintf(xname, sizeof(xname), "%s", cand->name);        \
                 dl_queue_video(cand->id, xname, xstream.url, _eff_sub_name,   \
-                               cand->runtime_ticks);                           \
+                               xstream.subtitle_url, cand->runtime_ticks);    \
                 if (cand->index_number > 0)                                    \
                     snprintf(state->np_toast, sizeof(state->np_toast),         \
                              got_sub ? "DL+sub: E%02d - %s"                    \
@@ -1178,8 +1318,25 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
 
                 if (!state->now_playing_offline && state->playing_index >= 0) {
                     /* Online fast path: browse list already has the season */
+                    int _prev_toast = state->np_toast_timer;
                     TRY_QUEUE_NEXT(state->items.items, state->items.count,
                                    state->playing_index + 1);
+                    /* If nothing was queued and more pages exist on the server,
+                     * fetch the next page and continue searching from index 0.
+                     * np_toast_timer is set to 150 by TRY_QUEUE_NEXT on success. */
+                    if (state->np_toast_timer == _prev_toast &&
+                        state->items.total_count >
+                        state->items.start_index + state->items.count) {
+                        const char *_pg_pid = (state->parent_depth > 0)
+                            ? state->parent_stack_ids[state->parent_depth - 1] : NULL;
+                        if (_pg_pid) {
+                            static jfin_item_list_t s_x_overflow;
+                            int _pg_start = state->items.start_index + state->items.count;
+                            if (jfin_get_items(session, _pg_pid, _pg_start,
+                                               JFIN_MAX_ITEMS, &s_x_overflow))
+                                TRY_QUEUE_NEXT(s_x_overflow.items, s_x_overflow.count, 0);
+                        }
+                    }
                 } else {
                     /* Offline path: resolve parent from server */
                     char xparent[JFIN_MAX_ID] = {0};
@@ -1190,7 +1347,10 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                                                 xparent, sizeof(xparent));
                     if (xparent[0]) {
                         static jfin_item_list_t s_sibs;
-                        if (jfin_get_siblings(session, xparent, JFIN_MAX_ITEMS, &s_sibs)) {
+                        int sib_start = state->now_playing.index_number > 1
+                                        ? state->now_playing.index_number - 1 : 0;
+                        if (jfin_get_siblings(session, xparent, sib_start,
+                                              JFIN_MAX_ITEMS, &s_sibs)) {
                             int cur_pos = -1;
                             for (int si = 0; si < s_sibs.count; si++) {
                                 if (strcmp(s_sibs.items[si].id,
@@ -1210,6 +1370,34 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     }
                 }
 #undef TRY_QUEUE_NEXT
+            }
+            /* ZL+Y (now-playing): download subtitle .ass for the current episode */
+            if ((kdown & KEY_Y) && (kheld & KEY_ZL) && state->has_now_playing
+                    && state->now_playing.id[0] && session->authenticated) {
+                int sub_idx = -1;
+                char sub_lang[8] = "";
+                /* Always fetch fresh — subtitle_stream_index may be stale from a
+                 * different episode or a previous online session. */
+                jfin_subtitle_list_t tmp_subs;
+                if (jfin_get_subtitle_streams(session, state->now_playing.id, &tmp_subs)
+                        && tmp_subs.count > 0) {
+                    sub_idx = tmp_subs.subs[0].index;
+                    strncpy(sub_lang, tmp_subs.subs[0].language, 7);
+                }
+                if (sub_idx >= 0) {
+                    jfin_stream_t sub_stream;
+                    if (jfin_get_video_stream(session, state->now_playing.id, 0, false,
+                                              sub_idx, &sub_stream)
+                            && sub_stream.subtitle_url[0]) {
+                        if (dl_queue_subtitle_only(state->now_playing.id,
+                                                   state->now_playing.name,
+                                                   sub_stream.subtitle_url)) {
+                            snprintf(state->np_toast, sizeof(state->np_toast),
+                                     "DL sub: %s", sub_lang[0] ? sub_lang : "track");
+                            state->np_toast_timer = 150;
+                        }
+                    }
+                }
             }
             /* B: back to browse, keep playing */
             if (kdown & KEY_B) {
@@ -1252,7 +1440,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                                                           next_mode != VP_3D_NONE,
                                                           state->subtitle_stream_index,
                                                           &stream) &&
-                                    video_player_play(stream.url, next_item->runtime_ticks, 0, next_mode)) {
+                                    video_player_play(stream.url, stream.subtitle_url, next_item->runtime_ticks, 0, next_mode)) {
                                     started = true;
                                 } else if (jfin_get_audio_stream(session, next_item->id, 0, &stream)) {
                                     audio_player_play(stream.url, next_item->runtime_ticks, 0);
@@ -1583,6 +1771,11 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     audio_player_play(e->path, 0, 0);
                     strncpy(state->now_playing.name, e->name, sizeof(state->now_playing.name)-1);
                     state->now_playing.name[sizeof(state->now_playing.name)-1] = '\0';
+                    /* Clear video-specific fields so seek/X handlers don't use stale state */
+                    state->now_playing.id[0] = '\0';
+                    state->now_playing_local_path[0] = '\0';
+                    state->now_playing_sub_path[0] = '\0';
+                    state->video_retry_ticks = 0;
                     state->has_now_playing = true;
                     state->now_playing_offline = true;
                     state->previous_view = state->current_view;
@@ -1602,7 +1795,16 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     reader_open_local(e->path);
                 } else {
                     audio_player_stop();
-                    if (video_player_play(e->path, 0, 0, VP_3D_NONE)) {
+                    /* Look up companion .ass subtitle file (downloaded alongside .ts) */
+                    char loc_sub_path[192] = {0};
+                    if (e->item_id[0]) {
+                        char ass_path[192];
+                        if (cache_path(e->item_id, "ass", ass_path, sizeof(ass_path))) {
+                            FILE *afp = fopen(ass_path, "rb");
+                            if (afp) { fclose(afp); snprintf(loc_sub_path, sizeof(loc_sub_path), "%s", ass_path); }
+                        }
+                    }
+                    if (video_player_play(e->path, loc_sub_path[0] ? loc_sub_path : NULL, 0, 0, VP_3D_NONE)) {
                         strncpy(state->now_playing.name, e->name, sizeof(state->now_playing.name)-1);
                         state->now_playing.name[sizeof(state->now_playing.name)-1] = '\0';
                         state->has_now_playing = true;
@@ -1610,15 +1812,15 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                         state->video_retry_ticks = 0;  /* reset tracked seek position */
                         snprintf(state->now_playing_local_path,
                                  sizeof(state->now_playing_local_path), "%s", e->path);
-                        /* Extract item_id from "sdmc:/.../video_ITEMID.ts" */
+                        snprintf(state->now_playing_sub_path,
+                                 sizeof(state->now_playing_sub_path), "%s", loc_sub_path);
+                        state->offline_subs_on = (loc_sub_path[0] != '\0');
+                        /* Use item_id stored in dl_entry_t (new cache naming) */
                         state->now_playing.id[0] = '\0';
-                        const char *fn = strrchr(e->path, '/');
-                        if (fn && strncmp(fn + 1, "video_", 6) == 0) {
-                            strncpy(state->now_playing.id, fn + 7,
+                        if (e->item_id[0])
+                            strncpy(state->now_playing.id, e->item_id,
                                     sizeof(state->now_playing.id) - 1);
-                            char *dot = strrchr(state->now_playing.id, '.');
-                            if (dot) *dot = '\0';
-                        }
+                        state->now_playing.index_number = e->ep_num;
                         state->previous_view = state->current_view;
                         state->current_view  = VIEW_NOW_PLAYING;
                     }
@@ -1792,13 +1994,7 @@ void ui_render_libraries(const ui_state_t *state)
 
 static bool item_has_download(const char *item_id, bool is_video)
 {
-    char path[192];
-    struct stat st;
-    if (is_video)
-        snprintf(path, sizeof(path), VDL_DIR "/video_%s.ts", item_id);
-    else
-        snprintf(path, sizeof(path), VDL_DIR "/cbz_%s.cbz", item_id);
-    return stat(path, &st) == 0;
+    return cache_has(item_id, is_video ? "ts" : "cbz");
 }
 
 void ui_render_browse(const ui_state_t *state)
@@ -1890,7 +2086,7 @@ void ui_render_browse(const ui_state_t *state)
                       "A:Sel  B:Back  L/R:Pg  SEL:Search");
         else if (sel_dl)
             draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
-                      "A:Play  X:DL  ZL+X:DL+Sub  B:Back");
+                      "A:Play  X:DL  ZL+X:DL+Sub  ZL+Y:DL Sub  B:Back");
         else
             draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
                       "A:Select  B:Back  SEL:Search");
@@ -1903,7 +2099,7 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     bool is_video = (vstatus.state != VIDEO_STOPPED);
 
     /* Top screen */
-    C2D_TargetClear(s_top, rgba(COLOR_BG_DARK));
+    C2D_TargetClear(s_top, bg_color());
     C2D_SceneBegin(s_top);
 
     if (!state->has_now_playing) {
@@ -1922,7 +2118,7 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
             char rbuf[48];
             snprintf(rbuf, sizeof(rbuf), "Retrying in %ds (%d/%d)...", secs,
                      state->video_retry_count + 1, max_retries);
-            draw_text(60, 70, 0.65f, rgba(COLOR_PRIMARY), "Subtitle transcode starting");
+            draw_text(80, 70, 0.65f, rgba(COLOR_PRIMARY), "Video not ready");
             draw_text(40, 108, 0.5f, rgba(COLOR_TEXT_PRIMARY), rbuf);
             draw_text(30, 143, 0.5f, rgba(COLOR_TEXT_SECONDARY), state->now_playing.name);
             draw_text(35, 178, 0.4f, rgba(COLOR_TEXT_SECONDARY),
@@ -1945,12 +2141,14 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     } else if (is_video) {
         /* Render video frame on top screen */
         video_player_render_frame();
+        draw_subtitles_top();
 
         /* Right eye for stereoscopic 3D (only when 3D slider is up) */
         if (vstatus.is_3d && osGet3DSliderState() > 0.0f) {
             C2D_TargetClear(s_top_right, rgba(0x000000FF));
             C2D_SceneBegin(s_top_right);
             video_player_render_frame_right();
+            draw_subtitles_top();
         }
     } else if (player->state == PLAYER_LOADING) {
         /* Show buffering indicator while audio is loading */
@@ -2049,9 +2247,13 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     /* Subtitle status */
     if (is_video) {
         char sub_str[64];
+        bool subs_active;
         if (state->now_playing_offline) {
-            snprintf(sub_str, sizeof(sub_str), "Subs: Encoded at download");
+            subs_active = state->offline_subs_on;
+            snprintf(sub_str, sizeof(sub_str), "Subs: %s",
+                     state->offline_subs_on ? "on" : "off");
         } else if (state->subtitle_stream_index >= 0) {
+            subs_active = true;
             const char *label = state->subtitle_lang_pref[0]
                                 ? state->subtitle_lang_pref : "on";
             for (int si = 0; si < state->subtitle_list.count; si++) {
@@ -2064,11 +2266,11 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
             snprintf(sub_str, sizeof(sub_str), "Subs: %s%s",
                      label, state->subtitle_sticky ? " (sticky)" : "");
         } else {
-            snprintf(sub_str, sizeof(sub_str), "Subs: Off");
+            subs_active = false;
+            snprintf(sub_str, sizeof(sub_str), "Subs: off");
         }
-        draw_text(30, 145, 0.4f, rgba(
-            state->subtitle_stream_index >= 0 ? COLOR_ACCENT : COLOR_TEXT_SECONDARY),
-            sub_str);
+        draw_text(30, 145, 0.4f, rgba(subs_active ? COLOR_ACCENT : COLOR_TEXT_SECONDARY),
+                  sub_str);
     }
 
     /* Shuffle/repeat status (audio only) */
@@ -2087,15 +2289,18 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     if (state->np_toast_timer > 0)
         draw_text(10, 163, 0.42f, rgba(COLOR_ACCENT), state->np_toast);
 
-    /* Controls hint */
-    const char *ctl_hint;
-    if (!is_video)
-        ctl_hint = "A:Pause B:Back STR:Stop ZL/ZR:Skip Y:Shuf SEL:Rep";
-    else if (state->now_playing_offline)
-        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek X:DLnxt ZL+X:+sub";
-    else
-        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek Y:Subs X:DLnxt ZL+X:+sub";
-    draw_text(10, 180, 0.4f, rgba(COLOR_TEXT_PRIMARY), ctl_hint);
+    /* Controls hint — two lines for video to fit all bindings */
+    if (!is_video) {
+        draw_text(10, 180, 0.4f, rgba(COLOR_TEXT_PRIMARY),
+                  "A:Pause B:Back STR:Stop ZL/ZR:Skip Y:Shuf SEL:Rep");
+    } else {
+        const char *line1 = state->now_playing_offline
+            ? "A:Pause B:Back STR:Stop L/R:Seek Y:sub"
+            : "A:Pause B:Back STR:Stop L/R:Seek Y:Subs";
+        draw_text(10, 177, 0.4f, rgba(COLOR_TEXT_PRIMARY), line1);
+        draw_text(10, 191, 0.4f, rgba(COLOR_TEXT_PRIMARY),
+                  "X:DLnxt  ZL+X:DL+sub  ZL+Y:DLsub");
+    }
 }
 
 void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
@@ -2362,8 +2567,12 @@ void ui_render_downloads(const ui_state_t *state)
 
     /* Active download */
     if (vds == DL_ACTIVE) {
-        char name_buf[56];
-        snprintf(name_buf, sizeof(name_buf), "%.54s", dl_item_name());
+        char name_buf[64];
+        int retry = dl_retry_count();
+        if (retry > 0)
+            snprintf(name_buf, sizeof(name_buf), "%.40s [Attempt %d/3]", dl_item_name(), retry + 1);
+        else
+            snprintf(name_buf, sizeof(name_buf), "%.54s", dl_item_name());
         draw_text(10, 26, 0.42f, rgba(COLOR_ACCENT), name_buf);
         if (dl_sub_name()[0]) {
             char si[72];
@@ -2394,7 +2603,12 @@ void ui_render_downloads(const ui_state_t *state)
     } else if (vds == DL_DONE) {
         draw_text(10, 26, 0.42f, rgba(0x88FF88FF), "Last download complete");
     } else if (vds == DL_ERROR) {
-        draw_text(10, 26, 0.42f, rgba(COLOR_DANGER), "Last download failed");
+        int retry = dl_retry_count();
+        char err_buf[56];
+        snprintf(err_buf, sizeof(err_buf), "Download failed (after %d attempt%s)",
+                 retry + 1, retry + 1 == 1 ? "" : "s");
+        draw_text(10, 26, 0.42f, rgba(COLOR_DANGER), err_buf);
+        draw_text(10, 42, 0.36f, rgba(COLOR_TEXT_SECONDARY), "Re-queue to resume from partial file");
     } else {
         draw_text(10, 26, 0.42f, rgba(COLOR_TEXT_SECONDARY), "No active download");
         draw_text(10, 42, 0.38f, rgba(COLOR_TEXT_SECONDARY), "Browse items and press X to queue");

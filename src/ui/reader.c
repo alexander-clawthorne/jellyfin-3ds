@@ -19,18 +19,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <sys/stat.h>
 #include <math.h>
 #include <curl/curl.h>
 
 #include "ui/reader.h"
 #include "util/cbz.h"
+#include "util/cache.h"
 #include "util/stb_image.h"
 #include "util/log.h"
 
 #define PAGE_TEX_W   1024
 #define PAGE_TEX_H   1024
-#define CACHE_DIR    "sdmc:/3ds/jellyfin-3ds"
 #define DL_STACK     (48 * 1024)
 #define DL_PRIORITY  0x3C
 #define DL_WBUF_SZ   (512 * 1024)  /* stdio write buffer — keeps fwrite fast */
@@ -55,17 +54,20 @@ static struct {
     volatile bool       cancel;
 
     /* params set before thread launch */
+    char item_id[JFIN_MAX_ID];      /* stored directly — no filename parsing */
     char server_url[JFIN_MAX_URL];
     char access_token[JFIN_MAX_TOKEN];
     char device_id[JFIN_MAX_ID];
-    char cache_path[160];           /* sdmc:/.../cbz_ITEMID.cbz */
+    char cache_path[192];           /* CACHE_DIR/ITEMID.cbz */
+    char part_path[192];            /* CACHE_DIR/ITEMID.cbz.part */
 } s_rdr;
 
 /* ── Nearest-neighbour scale ─────────────────────────────────────────── */
 
 static u8 *scale_rgb(const u8 *src, int sw, int sh, int dw, int dh)
 {
-    u8 *dst = malloc((size_t)(dw * dh * 3));
+    /* Use size_t multiplication to avoid int overflow on large textures */
+    u8 *dst = malloc((size_t)dw * (size_t)dh * 3u);
     if (!dst) return NULL;
     for (int dy = 0; dy < dh; dy++) {
         int sy = dy * sh / dh;
@@ -107,8 +109,6 @@ static size_t dl_write_cb(void *ptr, size_t sz, size_t nmemb, void *ud)
 {
     FILE *fp = (FILE *)ud;
     size_t n = sz * nmemb;
-    /* fwrite returns immediately to stdio buffer; actual disk write is
-     * deferred until the 512 KB buffer fills — prevents TCP back-pressure */
     size_t written = fwrite(ptr, 1, n, fp);
     s_rdr.dl_bytes += written;
     return written;
@@ -129,47 +129,24 @@ static void dl_thread_func(void *arg)
     (void)arg;
 
     /* Check cache: if file already exists and is a valid ZIP, skip download */
-    {
-        FILE *test = fopen(s_rdr.cache_path, "rb");
-        if (test) {
-            fclose(test);
-            log_write("CBZ: found cached %s", s_rdr.cache_path);
-            if (s_rdr.cbz_open_flag) { cbz_close(&s_rdr.cbz); s_rdr.cbz_open_flag = false; }
-            if (cbz_open(&s_rdr.cbz, s_rdr.cache_path)) {
-                s_rdr.cbz_open_flag = true;
-                s_rdr.page_ready    = false;
-                s_rdr.state         = READER_READY;
-                log_write("CBZ: cache hit — %d pages", s_rdr.cbz.count);
-                return;
-            }
-            /* Corrupt or incomplete — delete and re-download */
-            log_write("CBZ: cache invalid, re-downloading");
-            remove(s_rdr.cache_path);
+    if (cache_has(s_rdr.item_id, "cbz")) {
+        log_write("CBZ: found cached %s", s_rdr.cache_path);
+        if (s_rdr.cbz_open_flag) { cbz_close(&s_rdr.cbz); s_rdr.cbz_open_flag = false; }
+        if (cbz_open(&s_rdr.cbz, s_rdr.cache_path)) {
+            s_rdr.cbz_open_flag = true;
+            s_rdr.page_ready    = false;
+            s_rdr.state         = READER_READY;
+            log_write("CBZ: cache hit — %d pages", s_rdr.cbz.count);
+            return;
         }
+        /* Corrupt or incomplete — remove from index and re-download */
+        log_write("CBZ: cache invalid, re-downloading");
+        cache_remove(s_rdr.item_id, "cbz");
     }
 
     char url[JFIN_URL_BUF];
-    snprintf(url, sizeof(url), "%s/Items/%.*s/Download",
-             s_rdr.server_url,
-             /* item id is embedded in cache_path after the prefix */
-             0, "");
-    /* Re-derive item_id from cache_path: "sdmc:/.../cbz_XXXX.cbz" */
-    {
-        const char *base = strrchr(s_rdr.cache_path, '/');
-        base = base ? base + 1 : s_rdr.cache_path;
-        /* base = "cbz_ITEMID.cbz"; skip "cbz_" prefix */
-        char item_id[JFIN_MAX_ID] = {0};
-        if (strncmp(base, "cbz_", 4) == 0) {
-            const char *id_start = base + 4;
-            const char *dot = strrchr(id_start, '.');
-            int len = dot ? (int)(dot - id_start) : (int)strlen(id_start);
-            if (len > 0 && len < JFIN_MAX_ID) {
-                memcpy(item_id, id_start, (size_t)len);
-            }
-        }
-        snprintf(url, sizeof(url), "%s/Items/%s/Download",
-                 s_rdr.server_url, item_id);
-    }
+    snprintf(url, sizeof(url), "%s/Items/%s/Download",
+             s_rdr.server_url, s_rdr.item_id);
 
     char auth[640];
     snprintf(auth, sizeof(auth),
@@ -182,25 +159,18 @@ static void dl_thread_func(void *arg)
 
     log_write("CBZ: downloading %s", url);
 
-    mkdir("sdmc:/3ds", 0777);
-    mkdir(CACHE_DIR, 0777);
-
-    FILE *fp = fopen(s_rdr.cache_path, "wb");
+    FILE *fp = fopen(s_rdr.part_path, "wb");
     if (!fp) {
-        log_write("CBZ: cannot create %s", s_rdr.cache_path);
+        log_write("CBZ: cannot create %s", s_rdr.part_path);
         s_rdr.state = READER_ERROR;
         return;
     }
 
-    /* Large stdio write buffer — critical for download speed on 3DS.
-     * Without this each 16 KB curl chunk triggers a direct SD card write,
-     * causing TCP receive-buffer stalls and ~20 KB/s throughput instead of
-     * the expected 500+ KB/s. */
     static char s_dl_wbuf[DL_WBUF_SZ];
     setvbuf(fp, s_dl_wbuf, _IOFBF, DL_WBUF_SZ);
 
     CURL *curl = curl_easy_init();
-    if (!curl) { fclose(fp); remove(s_rdr.cache_path); s_rdr.state = READER_ERROR; return; }
+    if (!curl) { fclose(fp); remove(s_rdr.part_path); s_rdr.state = READER_ERROR; return; }
 
     struct curl_slist *hdrs = curl_slist_append(NULL, auth);
     curl_easy_setopt(curl, CURLOPT_URL,              url);
@@ -226,28 +196,37 @@ static void dl_thread_func(void *arg)
               (int)rc, http_code, s_rdr.dl_bytes);
 
     if (s_rdr.cancel) {
-        remove(s_rdr.cache_path);
+        remove(s_rdr.part_path);
         s_rdr.state = READER_IDLE;
         return;
     }
     if (rc != CURLE_OK) {
         log_write("CBZ: curl error: %s", curl_easy_strerror(rc));
-        remove(s_rdr.cache_path);
+        remove(s_rdr.part_path);
         s_rdr.state = READER_ERROR;
         return;
     }
     if (http_code < 200 || http_code >= 300) {
         log_write("CBZ: server returned HTTP %ld", http_code);
-        remove(s_rdr.cache_path);
+        remove(s_rdr.part_path);
         s_rdr.state = READER_ERROR;
         return;
     }
     if (s_rdr.dl_bytes < 22) {
         log_write("CBZ: file too small (%zu bytes)", s_rdr.dl_bytes);
-        remove(s_rdr.cache_path);
+        remove(s_rdr.part_path);
         s_rdr.state = READER_ERROR;
         return;
     }
+
+    /* Atomic rename: .part → final path, register in cache index */
+    if (rename(s_rdr.part_path, s_rdr.cache_path) != 0) {
+        log_write("CBZ: rename failed %s → %s", s_rdr.part_path, s_rdr.cache_path);
+        remove(s_rdr.part_path);
+        s_rdr.state = READER_ERROR;
+        return;
+    }
+    cache_index_add(s_rdr.item_id, "cbz");
 
     if (s_rdr.cbz_open_flag) { cbz_close(&s_rdr.cbz); s_rdr.cbz_open_flag = false; }
     if (!cbz_open(&s_rdr.cbz, s_rdr.cache_path)) {
@@ -312,16 +291,17 @@ void reader_open_book(const jfin_session_t *session, const char *item_id)
     s_rdr.dl_total   = 0;
     s_rdr.page_ready = false;
 
+    strncpy(s_rdr.item_id,      item_id,              JFIN_MAX_ID    - 1);
+    s_rdr.item_id[JFIN_MAX_ID - 1] = '\0';
     strncpy(s_rdr.server_url,   session->server_url,   JFIN_MAX_URL   - 1);
+    s_rdr.server_url[JFIN_MAX_URL - 1] = '\0';
     strncpy(s_rdr.access_token, session->access_token, JFIN_MAX_TOKEN - 1);
-    strncpy(s_rdr.device_id,    session->device_id,    JFIN_MAX_ID    - 1);
-    s_rdr.server_url[JFIN_MAX_URL - 1]     = '\0';
     s_rdr.access_token[JFIN_MAX_TOKEN - 1] = '\0';
-    s_rdr.device_id[JFIN_MAX_ID - 1]       = '\0';
+    strncpy(s_rdr.device_id,    session->device_id,    JFIN_MAX_ID    - 1);
+    s_rdr.device_id[JFIN_MAX_ID - 1] = '\0';
 
-    /* Cache file named by item ID so different books don't overwrite each other */
-    snprintf(s_rdr.cache_path, sizeof(s_rdr.cache_path),
-             CACHE_DIR "/cbz_%s.cbz", item_id);
+    cache_path     (item_id, "cbz", s_rdr.cache_path, sizeof(s_rdr.cache_path));
+    cache_part_path(item_id, "cbz", s_rdr.part_path,  sizeof(s_rdr.part_path));
 
     s_rdr.state = READER_DOWNLOADING;
     s_rdr.dl_thread = threadCreate(dl_thread_func, NULL, DL_STACK,
@@ -385,10 +365,6 @@ bool reader_load_page(int page_index, bool rotated)
         return false;
     }
 
-    /* Scale to fit within PAGE_TEX_W × PAGE_TEX_H maintaining aspect ratio.
-     * Without this we were passing the wrong stride to the RGB565 loop:
-     * a 1800-wide image's first 512×512 pixels span ~145 rows of the
-     * original, producing a garbled/static-noise result. */
     int tex_w = img_w, tex_h = img_h;
     bool was_scaled = false;
 
@@ -409,7 +385,7 @@ bool reader_load_page(int page_index, bool rotated)
     }
 
     /* RGB888 → RGB565 */
-    u16 *rgb565 = malloc((size_t)(tex_w * tex_h * 2));
+    u16 *rgb565 = malloc((size_t)tex_w * (size_t)tex_h * 2u);
     if (!rgb565) {
         if (was_scaled) free(rgb); else stbi_image_free(rgb);
         return false;
@@ -420,12 +396,10 @@ bool reader_load_page(int page_index, bool rotated)
     }
     if (was_scaled) free(rgb); else stbi_image_free(rgb);
 
-    /* Bake 90° CCW rotation into pixel data so reader_draw is a simple
-     * aspect-fit regardless of orientation.  C2D_DrawImage rotation is
-     * broken on 3DS (always produces a black screen). */
+    /* Bake 90° CCW rotation into pixel data */
     if (rotated) {
         int rw = tex_h, rh = tex_w;
-        u16 *rd = malloc((size_t)(rw * rh * 2));
+        u16 *rd = malloc((size_t)rw * (size_t)rh * 2u);
         if (rd) {
             for (int dy = 0; dy < rh; dy++)
                 for (int dx = 0; dx < rw; dx++)
@@ -493,10 +467,7 @@ void reader_draw_split_bottom(float zoom, float pan_x, float pan_y)
     if (!s_rdr.page_ready) return;
     float sc  = (400.0f / (float)s_rdr.pw) * zoom;
     float dw  = s_rdr.pw * sc;
-    /* Centre horizontally within the 320px bottom screen so the image
-     * doesn't appear shifted right relative to the narrower screen. */
     float ix  = (320.0f - dw) * 0.5f + pan_x;
-    /* Vertical: continue 240px below where the top screen started */
     float iy  = pan_y - 240.0f;
     C2D_DrawImageAt(s_rdr.img, ix, iy, 0.5f, NULL, sc, sc);
 }

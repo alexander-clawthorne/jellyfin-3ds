@@ -10,6 +10,7 @@
 
 #include <3ds.h>
 #include <citro2d.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -113,6 +114,12 @@ static struct {
     /* Stereoscopic 3D (SBS) */
     bool            is_3d;             /* mode_3d != VP_3D_NONE */
     vp_3d_mode_t    mode_3d;
+
+    /* Offline cache: url is an sdmc:/ path, played without the network
+     * thread or ring buffer (FFmpeg opens the file directly, seekable) */
+    bool            is_local;
+    int64_t         seek_hint_local; /* seek_offset saved before NET zeroes it */
+    int64_t         local_pts_base;  /* file PTS at episode-time 0 (set on first seek=0 play) */
     C3D_Tex         frame_tex_right[2]; /* right eye double-buffered (3D only) */
     C2D_Image       frame_img_right;
 
@@ -127,10 +134,9 @@ static struct {
     float           decode_fps;
     float           display_fps;
 
-    /* Local-file seek calibration */
-    volatile long   net_bytes_read;  /* bytes fed from file in current session */
-    long            net_start_bytes; /* file byte offset where this session started */
-    double          local_calib_bpt; /* calibrated bytes-per-tick (0 = use duration est.) */
+    /* Client-side subtitle track (main thread only) */
+    vp_subtitle_t  *subtitle_entries;
+    int             subtitle_count;
 } s_vp;
 
 /* Morton tiling offset tables — declared early, used by convert thread */
@@ -304,14 +310,14 @@ static void net_thread_func(void *arg)
             __atomic_store_n(&s_vp.demux.ring_finished, true, __ATOMIC_RELEASE);
             return;
         }
-
-        /* Get file size for duration estimate and seeking */
+        static char s_local_buf[65536];
+        /* Get file size for duration estimate and byte-level seeking */
         fseek(lf, 0, SEEK_END);
         long file_size = ftell(lf);
         fseek(lf, 0, SEEK_SET);
 
         if (file_size > 0) {
-            /* Estimate duration from file size + configured bitrate (video + audio kbps → bps) */
+            /* Estimate duration from file size + configured bitrate when unknown */
             if (s_vp.duration_ticks == 0) {
                 long total_bps = (long)(g_config.video_bitrate + g_config.audio_bitrate) * 1000L;
                 if (total_bps > 0) {
@@ -322,45 +328,59 @@ static void net_thread_func(void *arg)
                 }
             }
 
-            /* Byte-level seek using calibrated ratio when available */
-            int64_t dur = s_vp.duration_ticks;
+            /* Byte-level seek proportional to seek_offset_ticks / duration */
+            int64_t dur       = s_vp.duration_ticks;
             int64_t seek_hint = s_vp.seek_offset_ticks;
-            long seek_bytes = 0;
-            if (seek_hint > 0) {
-                if (s_vp.local_calib_bpt > 0.0) {
-                    seek_bytes = (long)(seek_hint * s_vp.local_calib_bpt);
-                } else if (dur > 0) {
-                    seek_bytes = (long)((double)file_size *
-                                        (double)seek_hint / (double)dur);
-                }
+            if (seek_hint > 0 && dur > 0) {
+                long seek_bytes = (long)((double)file_size *
+                                         (double)seek_hint / (double)dur);
                 seek_bytes = (seek_bytes / 188) * 188;
                 if (seek_bytes > 0 && seek_bytes < file_size) {
-                    fseek(lf, seek_bytes, SEEK_SET);
-                    log_write("NET: local seek to %ldB (%.1fs, bpt=%.4f calib=%d)",
-                              seek_bytes,
-                              (double)seek_hint / 10000000.0,
-                              s_vp.local_calib_bpt > 0.0
-                                  ? s_vp.local_calib_bpt
-                                  : (dur > 0 ? (double)file_size / (double)dur : 0.0),
-                              s_vp.local_calib_bpt > 0.0 ? 1 : 0);
-                } else {
-                    seek_bytes = 0;
+                    /* Scan backward for the H.264 SPS NAL start code (00 00 01 67).
+                     * Without an SPS in FFmpeg's probe window, avformat_find_stream_info
+                     * returns video=0x0, the MVD is initialised with 0x0 dimensions,
+                     * and every subsequent ProcessNAL fails with 0xD96170CA forever.
+                     * Reading from the nearest preceding SPS guarantees the first
+                     * 64 KB fed to FFmpeg contains the SPS and valid dimensions. */
+                    long sps_pos   = seek_bytes;
+                    long scan_end  = seek_bytes;
+                    long scan_lim  = seek_bytes - (5L * 1024 * 1024);
+                    if (scan_lim < 0) scan_lim = 0;
+                    bool sps_found = false;
+                    while (!sps_found && scan_end > scan_lim) {
+                        long cs = scan_end - (long)sizeof(s_local_buf);
+                        if (cs < 0) cs = 0;
+                        long cl = scan_end - cs;
+                        fseek(lf, cs, SEEK_SET);
+                        size_t nr = fread(s_local_buf, 1, (size_t)cl, lf);
+                        for (long i = (long)nr - 4; i >= 0 && !sps_found; i--) {
+                            if ((unsigned char)s_local_buf[i]     == 0x00 &&
+                                (unsigned char)s_local_buf[i + 1] == 0x00 &&
+                                (unsigned char)s_local_buf[i + 2] == 0x01 &&
+                                (unsigned char)s_local_buf[i + 3] == 0x67) {
+                                sps_pos   = cs + i;
+                                sps_found = true;
+                            }
+                        }
+                        scan_end = cs;
+                    }
+                    fseek(lf, sps_pos, SEEK_SET);
+                    log_write("NET: local seek %.1fs target=%ldB sps=%ldB%s",
+                              (double)seek_hint / 10000000.0, seek_bytes, sps_pos,
+                              sps_found ? "" : " (SPS not found)");
                 }
             }
-            /* Record session start for next-seek calibration */
-            __atomic_store_n(&s_vp.net_bytes_read, 0L, __ATOMIC_RELEASE);
-            s_vp.net_start_bytes = seek_bytes;
-            /* Stream PTS already reflects the actual file position; zero out
-             * seek_offset_ticks so the decode thread doesn't double-add it. */
+            /* Stream PTS already reflects file position — zero out so
+             * decode thread doesn't double-add the seek offset. Save it
+             * first so the DEC thread can compute the correct pts base. */
+            s_vp.seek_hint_local   = s_vp.seek_offset_ticks;
             s_vp.seek_offset_ticks = 0;
-            s_vp.position_ticks = 0;
+            s_vp.position_ticks    = 0;
         }
 
-        static char s_local_buf[65536];
         size_t n;
         while (!s_vp.stop_requested &&
                (n = fread(s_local_buf, 1, sizeof(s_local_buf), lf)) > 0) {
-            __atomic_fetch_add(&s_vp.net_bytes_read, (long)n, __ATOMIC_RELAXED);
             net_write_cb(s_local_buf, 1, n, &s_vp.demux);
         }
         fclose(lf);
@@ -384,7 +404,7 @@ static void net_thread_func(void *arg)
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 65536L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Jellyfin-3DS/1.0.1");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Jellyfin-3DS/" JFIN_VERSION);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L); /* server may need time to start transcoding */
 
     /* Retry on transient network failures (WiFi drops, peer resets) */
@@ -560,15 +580,27 @@ static void decode_audio_packet(AVPacket *pkt)
         /* Find a free NDSP buffer */
         ndspWaveBuf *wbuf = &s_vp.wave_bufs[s_vp.audio_buf_idx];
 
-        /* Wait for buffer to be free. No timeout here: while paused this
-         * legitimately takes arbitrarily long, and proceeding anyway would
-         * resubmit a buffer NDSP still owns (queue corruption). Stop breaks
-         * the wait. */
+        /* Wait for buffer to be free. 500ms timeout prevents the decode
+         * thread from blocking indefinitely when NDSP hasn't drained yet
+         * (e.g. subtitle-burn streams open with a long run of audio-only
+         * packets that fill all 4 wave_bufs before NDSP can play any).
+         * On timeout we drop this audio frame so the loop can reach the
+         * first video packet; NDSP catches up once playback establishes.
+         * During a genuine pause the wait loop re-evaluates every 1ms so
+         * stop_requested still breaks it promptly. */
+        int _wbuf_wait = 0;
         while ((wbuf->status == NDSP_WBUF_QUEUED || wbuf->status == NDSP_WBUF_PLAYING)
-               && !s_vp.stop_requested) {
+               && !s_vp.stop_requested && _wbuf_wait < 500) {
             svcSleepThread(1000000LL);
+            _wbuf_wait++;
         }
         if (s_vp.stop_requested) break;
+        if (_wbuf_wait >= 500) {
+            log_write("AUDIO: wbuf[%d] 500ms timeout, dropping frame (status=%d)",
+                      s_vp.audio_buf_idx, (int)wbuf->status);
+            s_vp.audio_buf_idx = (s_vp.audio_buf_idx + 1) % NUM_AUDIO_BUFS;
+            break;
+        }
 
         /* Convert to s16 stereo */
         int out_samples = swr_convert(s_vp.swr_ctx,
@@ -604,9 +636,10 @@ static void decode_audio_packet(AVPacket *pkt)
 static void decode_thread_func(void *arg)
 {
     (void)arg;
+
     log_write("DEC: thread started, waiting for prefetch (%d bytes)", PREFETCH_BYTES);
 
-    /* Wait for prefetch */
+    /* Wait for ring buffer to fill (both network and local fread paths) */
     while (!s_vp.stop_requested) {
         if (__atomic_load_n(&s_vp.demux.ring_fill, __ATOMIC_ACQUIRE) >= PREFETCH_BYTES
             || __atomic_load_n(&s_vp.demux.ring_finished, __ATOMIC_ACQUIRE))
@@ -625,6 +658,21 @@ static void decode_thread_func(void *arg)
         snprintf(s_vp.error_msg, sizeof(s_vp.error_msg), "Demux init failed");
         s_vp.state = VIDEO_ERROR;
         return;
+    }
+
+    /* Local files seek in-place instead of restarting the transcode.
+     * After a successful seek the file's own PTS already reflect the
+     * position, so the additive seek offset must be zeroed. */
+    if (s_vp.is_local && s_vp.seek_offset_ticks > 0) {
+        if (demux_seek(&s_vp.demux, s_vp.seek_offset_ticks)) {
+            log_write("DEC: local seek to %lld ticks OK",
+                      (long long)s_vp.seek_offset_ticks);
+            s_vp.seek_offset_ticks = 0;
+        } else {
+            log_write("DEC: local seek FAILED, playing from start");
+            s_vp.seek_offset_ticks = 0;
+            s_vp.position_ticks = 0;
+        }
     }
     log_write("DEC: demux OK video=%dx%d vidx=%d aidx=%d",
               s_vp.demux.video_width, s_vp.demux.video_height,
@@ -684,14 +732,72 @@ static void decode_thread_func(void *arg)
 
     /* Main decode loop */
     AVPacket *pkt = av_packet_alloc();
-    if (!pkt) return;
+    if (!pkt) { log_write("DEC: av_packet_alloc FAILED"); return; }
 
+    log_write("DEC: loop start");
+    bool first_pkt = true;
+    bool first_video_pkt = true;
+    /* Subtitle-burn streams open with an audio-only pre-roll while the
+     * server-side H.264 encoder initialises (subtitle filter startup).
+     * Skip audio packets until the first video IDR arrives — this lets
+     * the decode loop drain the pre-roll as fast as the ring delivers
+     * it instead of blocking on NDSP wave_buf availability. */
+    bool got_video    = false;
+    int  audio_skipped = 0;
     while (!s_vp.stop_requested) {
         bool is_video = false;
         int ret = demux_read_packet(&s_vp.demux, pkt, &is_video);
-        if (ret < 0) break; /* EOF or error */
+        if (first_pkt) {
+            first_pkt = false;
+            log_write("DEC: first pkt ret=%d is_video=%d size=%d",
+                      ret, (int)is_video, (ret >= 0 && pkt) ? pkt->size : 0);
+        }
+        if (ret < 0) {
+            log_write("DEC: loop break ret=%d ring_fill=%d finished=%d",
+                      ret,
+                      __atomic_load_n(&s_vp.demux.ring_fill, __ATOMIC_ACQUIRE),
+                      __atomic_load_n(&s_vp.demux.ring_finished, __ATOMIC_ACQUIRE));
+            break;
+        }
 
         if (is_video) {
+            if (first_video_pkt) {
+                first_video_pkt = false;
+                /* Subtitle-burn streams send audio pre-roll from PTS=0 up to
+                 * approximately the seek position before the first video IDR.
+                 * The first video IDR therefore arrives with PTS ≈ seek_time,
+                 * which would make position_ticks = seek_offset + seek_time ≈ 2×seek.
+                 * Cancel the pre-roll PTS out of seek_offset so that subsequent
+                 * position_ticks = corrected_seek_offset + video_pts = seek_offset. */
+                if (!s_vp.is_local && audio_skipped > 0 && pkt->pts != AV_NOPTS_VALUE) {
+                    AVFormatContext *_fmt = (AVFormatContext *)s_vp.demux.fmt_ctx;
+                    AVRational _tb = _fmt->streams[s_vp.demux.video_stream_idx]->time_base;
+                    double first_video_pts = pkt->pts * (double)_tb.num / (double)_tb.den;
+                    s_vp.seek_offset_ticks -= (int64_t)(first_video_pts * 10000000.0);
+                    log_write("DEC: first video pkt size=%d (skipped %d pre-roll pkts, pts=%.3fs, offset adj)",
+                              pkt->size, audio_skipped, first_video_pts);
+                } else if (s_vp.is_local && pkt->pts != AV_NOPTS_VALUE) {
+                    AVFormatContext *_fmt = (AVFormatContext *)s_vp.demux.fmt_ctx;
+                    AVRational _tb = _fmt->streams[s_vp.demux.video_stream_idx]->time_base;
+                    double first_video_pts = pkt->pts * (double)_tb.num / (double)_tb.den;
+                    int64_t fps_ticks = (int64_t)(first_video_pts * 10000000.0);
+                    if (s_vp.seek_hint_local == 0)
+                        s_vp.local_pts_base = fps_ticks;
+                    if (s_vp.local_pts_base > 0) {
+                        s_vp.seek_offset_ticks = -s_vp.local_pts_base;
+                    } else {
+                        s_vp.seek_offset_ticks = s_vp.seek_hint_local - fps_ticks;
+                    }
+                    log_write("DEC: first video pkt size=%d (skipped %d pts=%.3fs base=%.3fs adj seek=%llds)",
+                              pkt->size, audio_skipped, first_video_pts,
+                              (double)s_vp.local_pts_base / 10000000.0,
+                              (long long)(s_vp.seek_hint_local / 10000000LL));
+                } else {
+                    log_write("DEC: first video pkt size=%d (skipped %d audio pre-roll pkts)",
+                              pkt->size, audio_skipped);
+                }
+            }
+            got_video = true;
             bool got_frame = mvd_decode_packet(&s_vp.mvd, pkt->data, pkt->size);
 
             /* Compute video PTS in seconds */
@@ -718,7 +824,15 @@ static void decode_thread_func(void *arg)
                 }
             }
         } else {
-            decode_audio_packet(pkt);
+            if (got_video) {
+                decode_audio_packet(pkt);
+            } else {
+                audio_skipped++;
+                if (audio_skipped == 1 || audio_skipped % 200 == 0)
+                    log_write("DEC: pre-roll skip=%d ring_fill=%d",
+                              audio_skipped,
+                              __atomic_load_n(&s_vp.demux.ring_fill, __ATOMIC_ACQUIRE));
+            }
         }
 
         av_packet_unref(pkt);
@@ -983,20 +1097,285 @@ void video_player_cleanup(void)
     video_player_stop();
 }
 
-bool video_player_play(const char *url, int64_t duration_ticks,
+/* ── Client-side ASS subtitle loader ───────────────────────────────── */
+
+typedef struct { char *data; size_t size; size_t cap; } ass_buf_t;
+
+static size_t ass_write_cb(void *ptr, size_t sz, size_t nmemb, void *ud)
+{
+    ass_buf_t *b = (ass_buf_t *)ud;
+    size_t n = sz * nmemb;
+    if (b->size + n >= b->cap) {
+        size_t nc = (b->cap + n) * 2;
+        char *nd = realloc(b->data, nc + 1);
+        if (!nd) return 0;
+        b->data = nd;
+        b->cap = nc;
+    }
+    memcpy(b->data + b->size, ptr, n);
+    b->size += n;
+    b->data[b->size] = '\0';
+    return n;
+}
+
+static int64_t ass_parse_time(const char *s)
+{
+    int h = 0, m = 0, sec = 0, cs = 0;
+    sscanf(s, "%d:%d:%d.%d", &h, &m, &sec, &cs);
+    return ((int64_t)h * 3600 + m * 60 + sec) * 10000000LL + cs * 100000LL;
+}
+
+static void ass_strip_tags(const char *src, char *dst, int dst_max,
+                           float *px, float *py, int *align, uint32_t *color)
+{
+    int di = 0;
+    while (*src && di < dst_max - 1) {
+        if (*src == '{') {
+            const char *end = strchr(src, '}');
+            if (!end) { src++; continue; }
+            const char *p = src + 1;
+            while (p < end) {
+                if (*p == '\\') {
+                    p++;
+                    if (strncmp(p, "pos(", 4) == 0) {
+                        sscanf(p + 4, "%f,%f", px, py);
+                    } else if (strncmp(p, "an", 2) == 0 &&
+                               p[2] >= '1' && p[2] <= '9') {
+                        *align = p[2] - '0';
+                    } else if (strncmp(p, "c&H", 3) == 0 ||
+                               strncmp(p, "1c&H", 4) == 0) {
+                        const char *hstart = (p[0] == '1') ? p + 4 : p + 3;
+                        unsigned int bgr = 0;
+                        sscanf(hstart, "%x", &bgr);
+                        u8 r = bgr & 0xFF;
+                        u8 g = (bgr >> 8) & 0xFF;
+                        u8 b = (bgr >> 16) & 0xFF;
+                        *color = C2D_Color32(r, g, b, 255);
+                    } else if (*p == 'N' || *p == 'n') {
+                        if (di < dst_max - 1) dst[di++] = '\n';
+                    }
+                }
+                p++;
+            }
+            src = end + 1;
+        } else if (*src == '\\' && (*(src+1) == 'N' || *(src+1) == 'n')) {
+            if (di < dst_max - 1) dst[di++] = '\n';
+            src += 2;
+        } else {
+            dst[di++] = *src++;
+        }
+    }
+    dst[di] = '\0';
+}
+
+static void subtitle_parse_ass(const char *text)
+{
+    float play_res_x = 640.0f, play_res_y = 480.0f;
+    const char *p;
+
+    p = strstr(text, "PlayResX:");
+    if (p) play_res_x = (float)atoi(p + 9);
+    p = strstr(text, "PlayResY:");
+    if (p) play_res_y = (float)atoi(p + 9);
+
+    /* Parse [V4+ Styles] to get name→alignment defaults */
+    typedef struct { char name[64]; int align; } style_entry_t;
+    style_entry_t styles[32];
+    int style_count = 0;
+    int align_col = 18; /* default column index for Alignment in Format line */
+
+    const char *fmt = strstr(text, "\nFormat:");
+    if (fmt) {
+        fmt += 8;
+        int col = 0;
+        const char *fp = fmt;
+        while (*fp && *fp != '\n') {
+            while (*fp == ' ') fp++;
+            if (strncmp(fp, "Alignment", 9) == 0 &&
+                (fp[9] == ',' || fp[9] == '\n' || fp[9] == '\r' || fp[9] == ' '))
+                align_col = col;
+            col++;
+            while (*fp && *fp != ',' && *fp != '\n') fp++;
+            if (*fp == ',') fp++;
+        }
+    }
+    p = text;
+    while ((p = strstr(p, "\nStyle:")) != NULL && style_count < 32) {
+        p += 7;
+        while (*p == ' ') p++;
+        const char *eol = strchr(p, '\n');
+        const char *comma = strchr(p, ',');
+        if (!comma || (eol && comma > eol)) { p++; continue; }
+        int nlen = (int)(comma - p);
+        if (nlen >= 64) nlen = 63;
+        style_entry_t *se = &styles[style_count];
+        memcpy(se->name, p, nlen); se->name[nlen] = '\0';
+        se->align = 2;
+        const char *sp = comma + 1;
+        for (int c = 1; sp && *sp; c++) {
+            if (c == align_col) { se->align = atoi(sp); break; }
+            sp = strchr(sp, ',');
+            if (sp) sp++;
+        }
+        style_count++;
+        p++;
+    }
+
+    /* Count Dialogue lines to pre-allocate */
+    int count = 0;
+    p = text;
+    while ((p = strstr(p, "\nDialogue:")) != NULL) { count++; p++; }
+    if (count == 0) { log_write("SUB: no Dialogue lines"); return; }
+    if (count > 4096) count = 4096;
+
+    s_vp.subtitle_entries = malloc(count * sizeof(vp_subtitle_t));
+    if (!s_vp.subtitle_entries) return;
+
+    int idx = 0;
+    p = text;
+    while ((p = strstr(p, "\nDialogue:")) != NULL && idx < count) {
+        p++;                                    /* skip leading \n */
+        const char *eol = strchr(p, '\n');
+
+        /* Skip "Dialogue: " (10 chars) and split first 9 commas */
+        const char *fp = p + 10;
+        char start_ts[16] = {0}, end_ts[16] = {0}, style_name[64] = {0};
+        int fi;
+        for (fi = 0; fi < 9 && fp && *fp; fi++) {
+            const char *comma = strchr(fp, ',');
+            if (!comma || (eol && comma > eol)) break;
+            int n = (int)(comma - fp);
+            if (fi == 1 && n < 16) { memcpy(start_ts,   fp, n); start_ts[n]   = '\0'; }
+            if (fi == 2 && n < 16) { memcpy(end_ts,     fp, n); end_ts[n]     = '\0'; }
+            if (fi == 3 && n < 64) { memcpy(style_name, fp, n); style_name[n] = '\0'; }
+            fp = comma + 1;
+        }
+        if (fi < 9 || !fp) continue;           /* malformed line */
+
+        int tlen = eol ? (int)(eol - fp) : (int)strlen(fp);
+        while (tlen > 0 && (fp[tlen-1] == '\r' || fp[tlen-1] == '\n')) tlen--;
+
+        char tmp[512];
+        if (tlen >= (int)sizeof(tmp)) tlen = sizeof(tmp) - 1;
+        memcpy(tmp, fp, tlen);
+        tmp[tlen] = '\0';
+
+        vp_subtitle_t *e = &s_vp.subtitle_entries[idx];
+        e->start_ticks = ass_parse_time(start_ts);
+        e->end_ticks   = ass_parse_time(end_ts);
+        e->screen_x    = -1.0f;
+        e->screen_y    = -1.0f;
+        e->alignment   = 2;
+        e->color       = 0;
+
+        /* Default alignment from style definition */
+        for (int si = 0; si < style_count; si++) {
+            if (strcmp(styles[si].name, style_name) == 0) {
+                e->alignment = styles[si].align;
+                break;
+            }
+        }
+
+        float raw_x = -1.0f, raw_y = -1.0f;
+        ass_strip_tags(tmp, e->text, sizeof(e->text), &raw_x, &raw_y,
+                       &e->alignment, &e->color);
+
+        if (raw_x >= 0.0f) {
+            e->screen_x = raw_x * 400.0f / play_res_x;
+            e->screen_y = raw_y * 240.0f / play_res_y;
+        }
+
+        if (e->text[0]) idx++;
+    }
+    s_vp.subtitle_count = idx;
+    log_write("SUB: parsed %d cues (PlayRes %.0fx%.0f)",
+              idx, play_res_x, play_res_y);
+}
+
+static void subtitle_load(const char *url)
+{
+    free(s_vp.subtitle_entries);
+    s_vp.subtitle_entries = NULL;
+    s_vp.subtitle_count = 0;
+
+    if (!url || !url[0]) return;
+
+    /* Local file path (offline downloaded .ass) */
+    if (strncmp(url, "sdmc:/", 6) == 0) {
+        FILE *fp = fopen(url, "rb");
+        if (!fp) { log_write("SUB: local open failed: %s", url); return; }
+        fseek(fp, 0, SEEK_END);
+        long fsz = ftell(fp);
+        rewind(fp);
+        if (fsz <= 0 || fsz > 2 * 1024 * 1024) { fclose(fp); return; }
+        char *data = malloc((size_t)fsz + 1);
+        if (!data) { fclose(fp); return; }
+        size_t rd = fread(data, 1, (size_t)fsz, fp);
+        fclose(fp);
+        data[rd] = '\0';
+        log_write("SUB: local read %zu bytes", rd);
+        subtitle_parse_ass(data);
+        free(data);
+        return;
+    }
+
+    CURL *curl = curl_easy_init();
+    if (!curl) return;
+
+    ass_buf_t buf = {0};
+    buf.cap = 65536;
+    buf.data = malloc(buf.cap + 1);
+    if (!buf.data) { curl_easy_cleanup(curl); return; }
+    buf.data[0] = '\0';
+
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, ass_write_cb);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buf);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT, 20L);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Jellyfin-3DS/" JFIN_VERSION);
+    CURLcode res = curl_easy_perform(curl);
+    curl_easy_cleanup(curl);
+
+    if (res != CURLE_OK || !buf.size) {
+        log_write("SUB: fetch failed: %s", curl_easy_strerror(res));
+        free(buf.data);
+        return;
+    }
+    log_write("SUB: fetched %zu bytes", buf.size);
+    subtitle_parse_ass(buf.data);
+    free(buf.data);
+}
+
+void video_player_clear_subtitles(void)
+{
+    free(s_vp.subtitle_entries);
+    s_vp.subtitle_entries = NULL;
+    s_vp.subtitle_count = 0;
+}
+
+void video_player_load_subtitles(const char *url)
+{
+    if (!url || !url[0]) return;
+    video_player_clear_subtitles();
+    subtitle_load(url);
+}
+
+bool video_player_play(const char *url, const char *subtitle_url,
+                       int64_t duration_ticks,
                        int64_t seek_offset_ticks, vp_3d_mode_t mode_3d)
 {
     log_write("PLAY: starting video, url_len=%d seek=%lld 3d=%d",
               (int)strlen(url), (long long)seek_offset_ticks, (int)mode_3d);
     video_player_stop();
 
-    /* Calibrate local seek using actual bytes-per-tick from the just-stopped session */
-    {
-        int64_t prev_pos = s_vp.position_ticks;
-        long prev_bytes = s_vp.net_start_bytes +
-                          (long)__atomic_load_n(&s_vp.net_bytes_read, __ATOMIC_ACQUIRE);
-        if (prev_pos > 0 && prev_bytes > 0)
-            s_vp.local_calib_bpt = (double)prev_bytes / (double)prev_pos;
+    /* Reset PTS base when switching files so DEC recomputes it on first pkt */
+    if (strncmp(url, "http", 4) != 0) {
+        if (strcmp(url, s_vp.url) != 0)
+            s_vp.local_pts_base = 0;
+    } else {
+        s_vp.local_pts_base = 0;
     }
 
     snprintf(s_vp.url, sizeof(s_vp.url), "%s", url);
@@ -1012,7 +1391,14 @@ bool video_player_play(const char *url, int64_t duration_ticks,
     s_vp.new_tex_ready = false;
     s_vp.audio_buf_idx = 0;
 
-    /* Allocate ring buffer */
+    /* Anything that isn't http(s) is a cached file on the SD card.
+     * Local files use the same ring buffer path as network — net_thread
+     * fread()s the file rather than using curl. avformat_open_input does
+     * not support sdmc:/ paths, so we never set local_path. */
+    s_vp.is_local = (strncmp(url, "http", 4) != 0);
+    s_vp.demux.local_path = NULL;
+
+    /* Allocate ring buffer (used for both network and local fread paths) */
     s_vp.demux.ring_data = malloc(RING_SIZE);
     if (!s_vp.demux.ring_data) return false;
     s_vp.demux.ring_size = RING_SIZE;
@@ -1026,6 +1412,9 @@ bool video_player_play(const char *url, int64_t duration_ticks,
      * channel 0 (the music player's channel). */
     s_vp.ndsp_channel = 1;
     ndspChnReset(1);
+
+    /* Fetch and parse subtitle track before starting threads */
+    subtitle_load(subtitle_url);
 
     /* Launch threads (-1 = any available core) */
     s32 prio = 0;
@@ -1134,6 +1523,12 @@ void video_player_stop(void)
     s_vp.frame_img_right.tex = NULL;
     s_vp.is_3d = false;
     s_vp.mode_3d = VP_3D_NONE;
+    s_vp.is_local = false;
+    s_vp.demux.local_path = NULL;
+
+    free(s_vp.subtitle_entries);
+    s_vp.subtitle_entries = NULL;
+    s_vp.subtitle_count = 0;
 
     s_vp.state = VIDEO_STOPPED;
 }
@@ -1157,7 +1552,8 @@ video_status_t video_player_get_status(void)
     st.state = s_vp.state;
     st.position_ticks = s_vp.position_ticks;
     st.duration_ticks = s_vp.duration_ticks;
-    st.buffer_percent = (s_vp.demux.ring_size > 0)
+    st.buffer_percent = s_vp.is_local ? 100
+        : (s_vp.demux.ring_size > 0)
         ? (__atomic_load_n(&s_vp.demux.ring_fill, __ATOMIC_RELAXED) * 100 / s_vp.demux.ring_size) : 0;
     st.video_width = s_vp.display_width;
     st.video_height = s_vp.display_height;
@@ -1253,4 +1649,33 @@ void video_player_render_frame_right(void)
     float x, y, sx, sy;
     compute_3d_draw_rect(&x, &y, &sx, &sy);
     C2D_DrawImageAt(s_vp.frame_img_right, x, y, 0.5f, NULL, sx, sy);
+}
+
+int video_player_get_subtitles(vp_subtitle_t *out, int max_count)
+{
+    if (!s_vp.subtitle_entries || s_vp.subtitle_count == 0 || max_count <= 0)
+        return 0;
+
+    int64_t pos = s_vp.position_ticks;
+    int count = 0;
+
+    /* Binary search on start_ticks: find first entry where start > pos.
+     * All entries before this index have started; check which are still active. */
+    int lo = 0, hi = s_vp.subtitle_count;
+    while (lo < hi) {
+        int mid = (lo + hi) / 2;
+        if (s_vp.subtitle_entries[mid].start_ticks <= pos)
+            lo = mid + 1;
+        else
+            hi = mid;
+    }
+    /* Scan backwards from lo-1: entries that started and haven't ended yet.
+     * Limit to a 60-second window to handle long-running title cards etc. */
+    for (int i = lo - 1; i >= 0 && count < max_count; i--) {
+        if (s_vp.subtitle_entries[i].end_ticks > pos)
+            out[count++] = s_vp.subtitle_entries[i];
+        if (pos - s_vp.subtitle_entries[i].start_ticks > 600000000LL) /* 60s cap */
+            break;
+    }
+    return count;
 }

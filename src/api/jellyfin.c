@@ -525,14 +525,16 @@ bool jfin_get_item_parent_id(const jfin_session_t *session, const char *item_id,
 }
 
 bool jfin_get_siblings(const jfin_session_t *session, const char *parent_id,
-                       int limit, jfin_item_list_t *out)
+                       int start_index, int limit, jfin_item_list_t *out)
 {
     char url[JFIN_URL_BUF];
-    snprintf(url, sizeof(url),
+    int ulen = snprintf(url, sizeof(url),
              "%s/Users/%s/Items?ParentId=%s&Limit=%d"
              "&SortBy=IndexNumber&SortOrder=Ascending"
              "&Fields=PrimaryImageAspectRatio,BasicSyncInfo,ParentId",
              session->server_url, session->user_id, parent_id, limit);
+    if (start_index > 0 && ulen > 0 && ulen < (int)sizeof(url) - 24)
+        snprintf(url + ulen, sizeof(url) - ulen, "&StartIndex=%d", start_index);
     cJSON *json = api_get(session, url);
     if (!json) return false;
     parse_item_list(json, out);
@@ -612,10 +614,11 @@ bool jfin_get_video_stream(const jfin_session_t *session, const char *item_id,
                   (long long)start_ticks, (unsigned long)(tick & 0xFFFFFFFF));
     }
 
-    if (subtitle_stream_index >= 0 && len > 0 && len < (int)sizeof(out->url) - 48)
-        snprintf(out->url + len, sizeof(out->url) - len,
-                 "&SubtitleStreamIndex=%d&SubtitleMethod=Encode",
-                 subtitle_stream_index);
+    if (subtitle_stream_index >= 0)
+        snprintf(out->subtitle_url, sizeof(out->subtitle_url),
+                 "%s/Videos/%s/%s/Subtitles/%d/0/Stream.ass?api_key=%s",
+                 session->server_url, item_id, item_id,
+                 subtitle_stream_index, session->access_token);
 
     snprintf(out->container, sizeof(out->container), "%s", "ts");
     out->is_transcoding = true;

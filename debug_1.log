@@ -1,0 +1,2198 @@
+=== jellyfin-3ds debug log ===
+[   0.06] jellyfin-3ds v1.0.2 starting
+[  18.57] NAV: into 'Anime Shows' id=29391378c4118b35b77f84980d25f0a6 depth=1 items=18
+[  20.07] NAV: into 'Zatch Bell!' id=557ddd620c0eec6a2e01b2f4736ff91c depth=2 items=1
+[  21.02] NAV: into 'Season 1' id=a10cd6c702592d2e636fa5b3107ab51a depth=3 items=50
+[  44.61] VDL: downloading http://192.168.12.186:8096/Videos/bf35148d606571356cfd32e01aeeaa59/stream?UserId=41b9b982ca0c43648ca7ab29e083b269&DeviceId=3ds-0000000b2aea5c0c&VideoCodec=h264&AudioCodec=aac&Container=ts&MaxWidth=400&MaxHeight=240&VideoBitRate=472000&AudioBitRate=128000&MaxAudioChannels=2&TranscodingMaxAudioChannels=2&Profile=Baseline&Level=31&MaxRefFrames=2&MediaSourceId=bf35148d606571356cfd32e01aeeaa59&PlaySessionId=3ds99a93d3c&api_key=2f25a59809784943a42998f928b8cd8a
+[  57.50] VDL: curl=42 http=0 bytes=4481509
+[  65.29] NAV: into 'Anime Shows' id=29391378c4118b35b77f84980d25f0a6 depth=1 items=18
+[  68.14] NAV: into 'Zatch Bell!' id=557ddd620c0eec6a2e01b2f4736ff91c depth=2 items=1
+[  69.09] NAV: into 'Season 1' id=a10cd6c702592d2e636fa5b3107ab51a depth=3 items=50
+[  74.99] PLAY: starting video, url_len=458 seek=0 3d=0
+[  75.00] PLAY: creating threads, prio=48
+[  75.01] NET: thread started
+[  75.02] NET: fetching URL (len=458)
+[  75.05] DEC: thread started, waiting for prefetch (32768 bytes)
+[  75.14] CONV: thread started
+[  78.55] ART: loaded 128x72 from bf35148d606571356cfd32e01aeeaa59
+[  78.60] DEC: prefetch done, fill=40614 finished=0
+[  79.59] CONV: thread exiting
+[  79.64] NET: curl done, result=23 (Failed writing received data to disk/application), http=200, ring_fill=14343 attempt=0
+[  79.87] DEC: demux OK video=324x240 vidx=0 aidx=1
+[  79.94] DEC: MVD OK 336x240
+[  79.99] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[  80.03] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[  80.07] AUDIO: found decoder 'aac'
+[  80.12] AUDIO: decoder opened (swr deferred to first frame)
+[  80.17] PLAY: starting video, url_len=502 seek=0 3d=0
+[  80.18] PLAY: creating threads, prio=48
+[  80.20] NET: thread started
+[  80.21] NET: fetching URL (len=502)
+[  80.23] DEC: thread started, waiting for prefetch (32768 bytes)
+[  80.24] CONV: thread started
+[  84.74] DEC: prefetch done, fill=40614 finished=0
+[  87.31] DEC: demux OK video=324x240 vidx=0 aidx=1
+[  87.36] DEC: MVD OK 336x240
+[  87.37] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[  87.38] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[  87.40] AUDIO: found decoder 'aac'
+[  87.42] AUDIO: decoder opened (swr deferred to first frame)
+[  87.44] MVD: ProcessNAL ret=0x00017004 nal_size=996 frame#1
+[  87.46] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[  87.47] MVD: RenderFrame ret=0x00017000
+[  87.48] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[  87.58] MVD: ProcessNAL ret=0x00017003 nal_size=17 frame#2
+[  87.61] MVD: RenderFrame ret=0x00017000
+[  87.63] MVD: ProcessNAL ret=0x00017003 nal_size=17 frame#3
+[  87.64] RENDER: displaying tex[0] frame#1
+[  87.66] MVD: RenderFrame ret=0x00017000
+[  87.67] MVD: ProcessNAL ret=0x00017003 nal_size=17 frame#4
+[  87.69] RENDER: displaying tex[1] frame#2
+[  87.70] MVD: RenderFrame ret=0x00017000
+[  87.72] MVD: ProcessNAL ret=0x00017003 nal_size=17 frame#5
+[  87.73] RENDER: displaying tex[0] frame#3
+[  87.74] MVD: RenderFrame ret=0x00017000
+[  90.68] VDL: downloading http://192.168.12.186:8096/Videos/bf35148d606571356cfd32e01aeeaa59/stream?UserId=41b9b982ca0c43648ca7ab29e083b269&DeviceId=3ds-0000000b2aea5c0c&VideoCodec=h264&AudioCodec=aac&Container=ts&MaxWidth=400&MaxHeight=240&VideoBitRate=472000&AudioBitRate=128000&MaxAudioChannels=2&TranscodingMaxAudioChannels=2&Profile=Baseline&Level=31&MaxRefFrames=2&MediaSourceId=bf35148d606571356cfd32e01aeeaa59&PlaySessionId=3ds79dc6e0a&api_key=2f25a59809784943a42998f928b8cd8a&SubtitleStreamIndex=2&SubtitleMethod=Encode
+[  91.72] MVD: ProcessNAL ret=0x00017003 nal_size=3200 frame#100
+[  91.75] MVD: RenderFrame ret=0x00017000
+[  95.85] MVD: ProcessNAL ret=0x00017003 nal_size=2191 frame#200
+[  95.88] MVD: RenderFrame ret=0x00017000
+[ 100.11] MVD: ProcessNAL ret=0x00017003 nal_size=2978 frame#300
+[ 100.14] MVD: RenderFrame ret=0x00017000
+[ 104.24] MVD: ProcessNAL ret=0x00017003 nal_size=2463 frame#400
+[ 104.26] MVD: RenderFrame ret=0x00017000
+[ 108.50] MVD: ProcessNAL ret=0x00017003 nal_size=2908 frame#500
+[ 108.52] MVD: RenderFrame ret=0x00017000
+[ 112.61] MVD: ProcessNAL ret=0x00017003 nal_size=2894 frame#600
+[ 112.65] MVD: RenderFrame ret=0x00017000
+[ 116.79] MVD: ProcessNAL ret=0x00017003 nal_size=1665 frame#700
+[ 116.81] MVD: RenderFrame ret=0x00017000
+[ 121.04] MVD: ProcessNAL ret=0x00017003 nal_size=4428 frame#800
+[ 121.11] MVD: RenderFrame ret=0x00017000
+[ 125.24] MVD: ProcessNAL ret=0x00017003 nal_size=1047 frame#900
+[ 125.29] MVD: RenderFrame ret=0x00017000
+[ 129.37] MVD: ProcessNAL ret=0x00017003 nal_size=538 frame#1000
+[ 129.39] MVD: RenderFrame ret=0x00017000
+[ 133.62] MVD: ProcessNAL ret=0x00017003 nal_size=3473 frame#1100
+[ 133.63] MVD: RenderFrame ret=0x00017000
+[ 137.73] MVD: ProcessNAL ret=0x00017003 nal_size=9312 frame#1200
+[ 137.76] MVD: RenderFrame ret=0x00017000
+[ 141.98] MVD: ProcessNAL ret=0x00017003 nal_size=2531 frame#1300
+[ 142.04] MVD: RenderFrame ret=0x00017000
+[ 146.14] MVD: ProcessNAL ret=0x00017003 nal_size=585 frame#1400
+[ 146.16] MVD: RenderFrame ret=0x00017000
+[ 150.28] MVD: ProcessNAL ret=0x00017003 nal_size=1278 frame#1500
+[ 150.30] MVD: RenderFrame ret=0x00017000
+[ 154.54] MVD: ProcessNAL ret=0x00017003 nal_size=360 frame#1600
+[ 154.56] MVD: RenderFrame ret=0x00017000
+[ 158.64] MVD: ProcessNAL ret=0x00017003 nal_size=1765 frame#1700
+[ 158.68] MVD: RenderFrame ret=0x00017000
+[ 162.89] MVD: ProcessNAL ret=0x00017003 nal_size=8909 frame#1800
+[ 162.90] MVD: RenderFrame ret=0x00017000
+[ 167.00] MVD: ProcessNAL ret=0x00017003 nal_size=1574 frame#1900
+[ 167.02] MVD: RenderFrame ret=0x00017000
+[ 172.32] MVD: ProcessNAL ret=0x00017003 nal_size=3370 frame#2000
+[ 172.38] MVD: RenderFrame ret=0x00017000
+[ 176.65] MVD: ProcessNAL ret=0x00017003 nal_size=10949 frame#2100
+[ 176.70] MVD: RenderFrame ret=0x00017000
+[ 180.83] MVD: ProcessNAL ret=0x00017003 nal_size=3196 frame#2200
+[ 180.96] MVD: RenderFrame ret=0x00017000
+[ 185.17] MVD: ProcessNAL ret=0x00017003 nal_size=4154 frame#2300
+[ 185.19] MVD: RenderFrame ret=0x00017000
+[ 189.29] MVD: ProcessNAL ret=0x00017003 nal_size=30 frame#2400
+[ 189.30] MVD: RenderFrame ret=0x00017000
+[ 193.53] MVD: ProcessNAL ret=0x00017003 nal_size=22 frame#2500
+[ 193.55] MVD: RenderFrame ret=0x00017000
+[ 197.75] MVD: ProcessNAL ret=0x00017003 nal_size=1671 frame#2600
+[ 197.79] MVD: RenderFrame ret=0x00017000
+[ 201.89] MVD: ProcessNAL ret=0x00017003 nal_size=1168 frame#2700
+[ 201.91] MVD: RenderFrame ret=0x00017000
+[ 206.14] MVD: ProcessNAL ret=0x00017003 nal_size=1980 frame#2800
+[ 206.15] MVD: RenderFrame ret=0x00017000
+[ 210.24] MVD: ProcessNAL ret=0x00017003 nal_size=1460 frame#2900
+[ 210.28] MVD: RenderFrame ret=0x00017000
+[ 214.51] MVD: ProcessNAL ret=0x00017003 nal_size=27 frame#3000
+[ 214.53] MVD: RenderFrame ret=0x00017000
+[ 218.62] MVD: ProcessNAL ret=0x00017003 nal_size=60 frame#3100
+[ 218.64] MVD: RenderFrame ret=0x00017000
+[ 222.91] MVD: ProcessNAL ret=0x00017003 nal_size=306 frame#3200
+[ 222.96] MVD: RenderFrame ret=0x00017000
+[ 227.08] MVD: ProcessNAL ret=0x00017003 nal_size=1152 frame#3300
+[ 227.10] MVD: RenderFrame ret=0x00017000
+[ 231.30] MVD: ProcessNAL ret=0x00017003 nal_size=2843 frame#3400
+[ 231.32] MVD: RenderFrame ret=0x00017000
+[ 235.40] MVD: ProcessNAL ret=0x00017003 nal_size=446 frame#3500
+[ 235.43] MVD: RenderFrame ret=0x00017000
+[ 239.52] MVD: ProcessNAL ret=0x00017003 nal_size=947 frame#3600
+[ 239.54] MVD: RenderFrame ret=0x00017000
+[ 243.78] MVD: ProcessNAL ret=0x00017003 nal_size=3382 frame#3700
+[ 243.79] MVD: RenderFrame ret=0x00017000
+[ 247.91] MVD: ProcessNAL ret=0x00017003 nal_size=3681 frame#3800
+[ 247.92] MVD: RenderFrame ret=0x00017000
+[ 252.06] MVD: ProcessNAL ret=0x00017003 nal_size=1232 frame#3900
+[ 252.08] MVD: RenderFrame ret=0x00017000
+[ 256.33] MVD: ProcessNAL ret=0x00017003 nal_size=784 frame#4000
+[ 256.35] MVD: RenderFrame ret=0x00017000
+[ 260.43] MVD: ProcessNAL ret=0x00017003 nal_size=1454 frame#4100
+[ 260.45] MVD: RenderFrame ret=0x00017000
+[ 264.54] MVD: ProcessNAL ret=0x00017003 nal_size=3448 frame#4200
+[ 264.65] MVD: RenderFrame ret=0x00017000
+[ 268.88] MVD: ProcessNAL ret=0x00017003 nal_size=3441 frame#4300
+[ 268.94] MVD: RenderFrame ret=0x00017000
+[ 273.06] MVD: ProcessNAL ret=0x00017003 nal_size=491 frame#4400
+[ 273.11] MVD: RenderFrame ret=0x00017000
+[ 277.36] MVD: ProcessNAL ret=0x00017003 nal_size=2835 frame#4500
+[ 277.38] MVD: RenderFrame ret=0x00017000
+[ 281.48] MVD: ProcessNAL ret=0x00017003 nal_size=1410 frame#4600
+[ 281.50] MVD: RenderFrame ret=0x00017000
+[ 285.71] MVD: ProcessNAL ret=0x00017003 nal_size=60 frame#4700
+[ 285.73] MVD: RenderFrame ret=0x00017000
+[ 289.82] MVD: ProcessNAL ret=0x00017003 nal_size=1301 frame#4800
+[ 289.84] MVD: RenderFrame ret=0x00017000
+[ 293.93] MVD: ProcessNAL ret=0x00017003 nal_size=191 frame#4900
+[ 293.94] MVD: RenderFrame ret=0x00017000
+[ 298.20] MVD: ProcessNAL ret=0x00017003 nal_size=41 frame#5000
+[ 298.22] MVD: RenderFrame ret=0x00017000
+[ 302.31] MVD: ProcessNAL ret=0x00017003 nal_size=816 frame#5100
+[ 302.33] MVD: RenderFrame ret=0x00017000
+[ 306.57] MVD: ProcessNAL ret=0x00017003 nal_size=438 frame#5200
+[ 306.61] MVD: RenderFrame ret=0x00017000
+[ 310.68] MVD: ProcessNAL ret=0x00017003 nal_size=167 frame#5300
+[ 310.70] MVD: RenderFrame ret=0x00017000
+[ 314.91] MVD: ProcessNAL ret=0x00017003 nal_size=891 frame#5400
+[ 314.99] MVD: RenderFrame ret=0x00017000
+[ 319.09] MVD: ProcessNAL ret=0x00017003 nal_size=312 frame#5500
+[ 319.11] MVD: RenderFrame ret=0x00017000
+[ 323.19] MVD: ProcessNAL ret=0x00017003 nal_size=346 frame#5600
+[ 323.21] MVD: RenderFrame ret=0x00017000
+[ 327.47] MVD: ProcessNAL ret=0x00017003 nal_size=2500 frame#5700
+[ 327.49] MVD: RenderFrame ret=0x00017000
+[ 331.62] MVD: ProcessNAL ret=0x00017003 nal_size=6051 frame#5800
+[ 331.64] MVD: RenderFrame ret=0x00017000
+[ 335.75] MVD: ProcessNAL ret=0x00017003 nal_size=338 frame#5900
+[ 335.77] MVD: RenderFrame ret=0x00017000
+[ 340.02] MVD: ProcessNAL ret=0x00017003 nal_size=1338 frame#6000
+[ 340.05] MVD: RenderFrame ret=0x00017000
+[ 344.16] MVD: ProcessNAL ret=0x00017003 nal_size=1496 frame#6100
+[ 344.18] MVD: RenderFrame ret=0x00017000
+[ 348.28] MVD: ProcessNAL ret=0x00017003 nal_size=1309 frame#6200
+[ 348.30] MVD: RenderFrame ret=0x00017000
+[ 352.42] MVD: ProcessNAL ret=0x00017003 nal_size=870 frame#6300
+[ 352.46] MVD: RenderFrame ret=0x00017000
+[ 356.70] MVD: ProcessNAL ret=0x00017003 nal_size=310 frame#6400
+[ 356.72] MVD: RenderFrame ret=0x00017000
+[ 360.82] MVD: ProcessNAL ret=0x00017003 nal_size=1726 frame#6500
+[ 360.84] MVD: RenderFrame ret=0x00017000
+[ 365.06] MVD: ProcessNAL ret=0x00017003 nal_size=2020 frame#6600
+[ 365.12] MVD: RenderFrame ret=0x00017000
+[ 369.24] MVD: ProcessNAL ret=0x00017003 nal_size=748 frame#6700
+[ 369.29] MVD: RenderFrame ret=0x00017000
+[ 373.55] MVD: ProcessNAL ret=0x00017003 nal_size=5825 frame#6800
+[ 373.57] MVD: RenderFrame ret=0x00017000
+[ 377.68] MVD: ProcessNAL ret=0x00017003 nal_size=1617 frame#6900
+[ 377.70] MVD: RenderFrame ret=0x00017000
+[ 381.81] MVD: ProcessNAL ret=0x00017003 nal_size=1334 frame#7000
+[ 381.83] MVD: RenderFrame ret=0x00017000
+[ 386.06] MVD: ProcessNAL ret=0x00017003 nal_size=3257 frame#7100
+[ 386.10] MVD: RenderFrame ret=0x00017000
+[ 390.19] MVD: ProcessNAL ret=0x00017003 nal_size=1515 frame#7200
+[ 390.26] MVD: RenderFrame ret=0x00017000
+[ 394.39] MVD: ProcessNAL ret=0x00017003 nal_size=181 frame#7300
+[ 394.41] MVD: RenderFrame ret=0x00017000
+[ 398.64] MVD: ProcessNAL ret=0x00017003 nal_size=99 frame#7400
+[ 398.66] MVD: RenderFrame ret=0x00017000
+[ 402.75] MVD: ProcessNAL ret=0x00017003 nal_size=2195 frame#7500
+[ 402.76] MVD: RenderFrame ret=0x00017000
+[ 406.85] MVD: ProcessNAL ret=0x00017003 nal_size=1543 frame#7600
+[ 406.87] MVD: RenderFrame ret=0x00017000
+[ 411.09] MVD: ProcessNAL ret=0x00017003 nal_size=883 frame#7700
+[ 411.14] MVD: RenderFrame ret=0x00017000
+[ 415.38] MVD: ProcessNAL ret=0x00017003 nal_size=3837 frame#7800
+[ 415.40] MVD: RenderFrame ret=0x00017000
+[ 419.53] MVD: ProcessNAL ret=0x00017003 nal_size=261 frame#7900
+[ 419.55] MVD: RenderFrame ret=0x00017000
+[ 423.66] MVD: ProcessNAL ret=0x00017003 nal_size=847 frame#8000
+[ 423.69] MVD: RenderFrame ret=0x00017000
+[ 427.79] MVD: ProcessNAL ret=0x00017003 nal_size=3560 frame#8100
+[ 427.81] MVD: RenderFrame ret=0x00017000
+[ 431.94] MVD: ProcessNAL ret=0x00017003 nal_size=94 frame#8200
+[ 431.96] MVD: RenderFrame ret=0x00017000
+[ 436.20] MVD: ProcessNAL ret=0x00017003 nal_size=296 frame#8300
+[ 436.22] MVD: RenderFrame ret=0x00017000
+[ 440.32] MVD: ProcessNAL ret=0x00017003 nal_size=247 frame#8400
+[ 440.34] MVD: RenderFrame ret=0x00017000
+[ 444.47] MVD: ProcessNAL ret=0x00017003 nal_size=102 frame#8500
+[ 444.48] MVD: RenderFrame ret=0x00017000
+[ 448.70] MVD: ProcessNAL ret=0x00017003 nal_size=2530 frame#8600
+[ 448.72] MVD: RenderFrame ret=0x00017000
+[ 452.94] MVD: ProcessNAL ret=0x00017003 nal_size=3921 frame#8700
+[ 452.96] MVD: RenderFrame ret=0x00017000
+[ 457.05] MVD: ProcessNAL ret=0x00017003 nal_size=5389 frame#8800
+[ 457.07] MVD: RenderFrame ret=0x00017000
+[ 461.16] MVD: ProcessNAL ret=0x00017003 nal_size=644 frame#8900
+[ 461.18] MVD: RenderFrame ret=0x00017000
+[ 465.36] MVD: ProcessNAL ret=0x00017003 nal_size=37 frame#9000
+[ 465.41] MVD: RenderFrame ret=0x00017000
+[ 469.67] MVD: ProcessNAL ret=0x00017003 nal_size=572 frame#9100
+[ 469.69] MVD: RenderFrame ret=0x00017000
+[ 473.77] MVD: ProcessNAL ret=0x00017003 nal_size=571 frame#9200
+[ 473.79] MVD: RenderFrame ret=0x00017000
+[ 478.05] MVD: ProcessNAL ret=0x00017003 nal_size=4722 frame#9300
+[ 478.07] MVD: RenderFrame ret=0x00017000
+[ 482.18] MVD: ProcessNAL ret=0x00017003 nal_size=4997 frame#9400
+[ 482.19] MVD: RenderFrame ret=0x00017000
+[ 486.43] MVD: ProcessNAL ret=0x00017003 nal_size=4834 frame#9500
+[ 486.45] MVD: RenderFrame ret=0x00017000
+[ 490.54] MVD: ProcessNAL ret=0x00017003 nal_size=3606 frame#9600
+[ 490.58] MVD: RenderFrame ret=0x00017000
+[ 494.66] MVD: ProcessNAL ret=0x00017003 nal_size=1149 frame#9700
+[ 494.68] MVD: RenderFrame ret=0x00017000
+[ 498.89] MVD: ProcessNAL ret=0x00017003 nal_size=986 frame#9800
+[ 499.00] MVD: RenderFrame ret=0x00017000
+[ 503.11] MVD: ProcessNAL ret=0x00017003 nal_size=2756 frame#9900
+[ 503.16] MVD: RenderFrame ret=0x00017000
+[ 507.43] MVD: ProcessNAL ret=0x00017003 nal_size=4186 frame#10000
+[ 507.47] MVD: RenderFrame ret=0x00017000
+[ 511.57] MVD: ProcessNAL ret=0x00017003 nal_size=436 frame#10100
+[ 511.59] MVD: RenderFrame ret=0x00017000
+[ 515.82] MVD: ProcessNAL ret=0x00017003 nal_size=1392 frame#10200
+[ 515.84] MVD: RenderFrame ret=0x00017000
+[ 519.94] MVD: ProcessNAL ret=0x00017003 nal_size=2157 frame#10300
+[ 519.98] MVD: RenderFrame ret=0x00017000
+[ 524.05] MVD: ProcessNAL ret=0x00017003 nal_size=3369 frame#10400
+[ 524.07] MVD: RenderFrame ret=0x00017000
+[ 528.33] MVD: ProcessNAL ret=0x00017003 nal_size=727 frame#10500
+[ 528.37] MVD: RenderFrame ret=0x00017000
+[ 532.45] MVD: ProcessNAL ret=0x00017003 nal_size=1959 frame#10600
+[ 532.47] MVD: RenderFrame ret=0x00017000
+[ 536.70] MVD: ProcessNAL ret=0x00017003 nal_size=2455 frame#10700
+[ 536.72] MVD: RenderFrame ret=0x00017000
+[ 540.83] MVD: ProcessNAL ret=0x00017003 nal_size=1622 frame#10800
+[ 540.90] MVD: RenderFrame ret=0x00017000
+[ 544.98] MVD: ProcessNAL ret=0x00017003 nal_size=3301 frame#10900
+[ 545.00] MVD: RenderFrame ret=0x00017000
+[ 549.24] MVD: ProcessNAL ret=0x00017003 nal_size=4212 frame#11000
+[ 549.32] VDL: curl=0 http=200 bytes=99590744
+[ 549.32] MVD: RenderFrame ret=0x00017000
+[ 549.40] VDL: saved sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts (99590744 bytes)
+[ 549.42] VDL: downloading http://192.168.12.186:8096/Videos/c680ae2090190913c20cb42c8316bdeb/stream?UserId=41b9b982ca0c43648ca7ab29e083b269&DeviceId=3ds-0000000b2aea5c0c&VideoCodec=h264&AudioCodec=aac&Container=ts&MaxWidth=400&MaxHeight=240&VideoBitRate=472000&AudioBitRate=128000&MaxAudioChannels=2&TranscodingMaxAudioChannels=2&Profile=Baseline&Level=31&MaxRefFrames=2&MediaSourceId=c680ae2090190913c20cb42c8316bdeb&PlaySessionId=3dsb45d6416&api_key=2f25a59809784943a42998f928b8cd8a&SubtitleStreamIndex=2&SubtitleMethod=Encode
+[ 553.44] MVD: ProcessNAL ret=0x00017003 nal_size=2215 frame#11100
+[ 553.46] MVD: RenderFrame ret=0x00017000
+[ 557.55] MVD: ProcessNAL ret=0x00017003 nal_size=3184 frame#11200
+[ 557.58] MVD: RenderFrame ret=0x00017000
+[ 561.80] MVD: ProcessNAL ret=0x00017003 nal_size=959 frame#11300
+[ 561.82] MVD: RenderFrame ret=0x00017000
+[ 565.93] MVD: ProcessNAL ret=0x00017003 nal_size=3280 frame#11400
+[ 565.95] MVD: RenderFrame ret=0x00017000
+[ 570.17] MVD: ProcessNAL ret=0x00017003 nal_size=2333 frame#11500
+[ 570.19] MVD: RenderFrame ret=0x00017000
+[ 574.29] MVD: ProcessNAL ret=0x00017003 nal_size=3480 frame#11600
+[ 574.30] MVD: RenderFrame ret=0x00017000
+[ 578.42] MVD: ProcessNAL ret=0x00017003 nal_size=3195 frame#11700
+[ 578.44] MVD: RenderFrame ret=0x00017000
+[ 582.67] MVD: ProcessNAL ret=0x00017003 nal_size=4161 frame#11800
+[ 582.69] MVD: RenderFrame ret=0x00017000
+[ 586.78] MVD: ProcessNAL ret=0x00017003 nal_size=3819 frame#11900
+[ 586.80] MVD: RenderFrame ret=0x00017000
+[ 591.03] MVD: ProcessNAL ret=0x00017003 nal_size=3352 frame#12000
+[ 591.05] MVD: RenderFrame ret=0x00017000
+[ 595.18] MVD: ProcessNAL ret=0x00017003 nal_size=1294 frame#12100
+[ 595.19] MVD: RenderFrame ret=0x00017000
+[ 599.31] MVD: ProcessNAL ret=0x00017003 nal_size=3829 frame#12200
+[ 599.33] MVD: RenderFrame ret=0x00017000
+[ 603.55] MVD: ProcessNAL ret=0x00017003 nal_size=824 frame#12300
+[ 603.56] MVD: RenderFrame ret=0x00017000
+[ 607.65] MVD: ProcessNAL ret=0x00017003 nal_size=825 frame#12400
+[ 607.67] MVD: RenderFrame ret=0x00017000
+[ 611.89] MVD: ProcessNAL ret=0x00017003 nal_size=2665 frame#12500
+[ 611.91] MVD: RenderFrame ret=0x00017000
+[ 615.99] MVD: ProcessNAL ret=0x00017003 nal_size=504 frame#12600
+[ 616.01] MVD: RenderFrame ret=0x00017000
+[ 620.25] MVD: ProcessNAL ret=0x00017003 nal_size=1914 frame#12700
+[ 620.27] MVD: RenderFrame ret=0x00017000
+[ 624.37] MVD: ProcessNAL ret=0x00017003 nal_size=3784 frame#12800
+[ 624.38] MVD: RenderFrame ret=0x00017000
+[ 628.48] MVD: ProcessNAL ret=0x00017003 nal_size=2722 frame#12900
+[ 628.49] MVD: RenderFrame ret=0x00017000
+[ 632.76] MVD: ProcessNAL ret=0x00017003 nal_size=661 frame#13000
+[ 632.77] MVD: RenderFrame ret=0x00017000
+[ 636.86] MVD: ProcessNAL ret=0x00017003 nal_size=1880 frame#13100
+[ 636.90] MVD: RenderFrame ret=0x00017000
+[ 641.01] MVD: ProcessNAL ret=0x00017003 nal_size=2013 frame#13200
+[ 641.03] MVD: RenderFrame ret=0x00017000
+[ 645.27] MVD: ProcessNAL ret=0x00017003 nal_size=2787 frame#13300
+[ 645.28] MVD: RenderFrame ret=0x00017000
+[ 649.42] MVD: ProcessNAL ret=0x00017003 nal_size=1910 frame#13400
+[ 649.43] MVD: RenderFrame ret=0x00017000
+[ 653.53] MVD: ProcessNAL ret=0x00017003 nal_size=1595 frame#13500
+[ 653.55] MVD: RenderFrame ret=0x00017000
+[ 657.82] MVD: ProcessNAL ret=0x00017003 nal_size=2025 frame#13600
+[ 657.83] MVD: RenderFrame ret=0x00017000
+[ 661.91] MVD: ProcessNAL ret=0x00017003 nal_size=2723 frame#13700
+[ 661.92] MVD: RenderFrame ret=0x00017000
+[ 666.16] MVD: ProcessNAL ret=0x00017003 nal_size=834 frame#13800
+[ 666.17] MVD: RenderFrame ret=0x00017000
+[ 670.26] MVD: ProcessNAL ret=0x00017003 nal_size=136 frame#13900
+[ 670.28] MVD: RenderFrame ret=0x00017000
+[ 674.52] MVD: ProcessNAL ret=0x00017003 nal_size=381 frame#14000
+[ 674.53] MVD: RenderFrame ret=0x00017000
+[ 678.63] MVD: ProcessNAL ret=0x00017003 nal_size=431 frame#14100
+[ 678.64] MVD: RenderFrame ret=0x00017000
+[ 682.74] MVD: ProcessNAL ret=0x00017003 nal_size=1015 frame#14200
+[ 682.75] MVD: RenderFrame ret=0x00017000
+[ 687.02] MVD: ProcessNAL ret=0x00017003 nal_size=290 frame#14300
+[ 687.03] MVD: RenderFrame ret=0x00017000
+[ 691.13] MVD: ProcessNAL ret=0x00017003 nal_size=3451 frame#14400
+[ 691.15] MVD: RenderFrame ret=0x00017000
+[ 695.24] MVD: ProcessNAL ret=0x00017003 nal_size=4517 frame#14500
+[ 695.25] MVD: RenderFrame ret=0x00017000
+[ 699.54] MVD: ProcessNAL ret=0x00017003 nal_size=304 frame#14600
+[ 699.56] MVD: RenderFrame ret=0x00017000
+[ 703.69] MVD: ProcessNAL ret=0x00017003 nal_size=17 frame#14700
+[ 703.70] MVD: RenderFrame ret=0x00017000
+[ 707.83] MVD: ProcessNAL ret=0x00017003 nal_size=6372 frame#14800
+[ 707.85] MVD: RenderFrame ret=0x00017000
+[ 711.91] MVD: ProcessNAL ret=0x00017003 nal_size=1118 frame#14900
+[ 711.93] MVD: RenderFrame ret=0x00017000
+[ 716.20] MVD: ProcessNAL ret=0x00017003 nal_size=2125 frame#15000
+[ 716.22] MVD: RenderFrame ret=0x00017000
+[ 720.34] MVD: ProcessNAL ret=0x00017003 nal_size=5395 frame#15100
+[ 720.35] MVD: RenderFrame ret=0x00017000
+[ 724.45] MVD: ProcessNAL ret=0x00017003 nal_size=1778 frame#15200
+[ 724.56] MVD: RenderFrame ret=0x00017000
+[ 728.78] MVD: ProcessNAL ret=0x00017003 nal_size=3100 frame#15300
+[ 728.80] MVD: RenderFrame ret=0x00017000
+[ 732.91] MVD: ProcessNAL ret=0x00017003 nal_size=5320 frame#15400
+[ 732.92] MVD: RenderFrame ret=0x00017000
+[ 737.16] MVD: ProcessNAL ret=0x00017003 nal_size=1205 frame#15500
+[ 737.17] MVD: RenderFrame ret=0x00017000
+[ 741.29] MVD: ProcessNAL ret=0x00017003 nal_size=1826 frame#15600
+[ 741.30] MVD: RenderFrame ret=0x00017000
+[ 745.50] MVD: ProcessNAL ret=0x00017003 nal_size=3653 frame#15700
+[ 745.52] MVD: RenderFrame ret=0x00017000
+[ 749.62] MVD: ProcessNAL ret=0x00017003 nal_size=1888 frame#15800
+[ 749.63] MVD: RenderFrame ret=0x00017000
+[ 753.74] MVD: ProcessNAL ret=0x00017003 nal_size=192 frame#15900
+[ 753.75] MVD: RenderFrame ret=0x00017000
+[ 757.99] MVD: ProcessNAL ret=0x00017003 nal_size=89 frame#16000
+[ 758.01] MVD: RenderFrame ret=0x00017000
+[ 762.10] MVD: ProcessNAL ret=0x00017003 nal_size=771 frame#16100
+[ 762.12] MVD: RenderFrame ret=0x00017000
+[ 766.35] MVD: ProcessNAL ret=0x00017003 nal_size=3204 frame#16200
+[ 766.36] MVD: RenderFrame ret=0x00017000
+[ 770.48] MVD: ProcessNAL ret=0x00017003 nal_size=1259 frame#16300
+[ 770.49] MVD: RenderFrame ret=0x00017000
+[ 774.71] MVD: ProcessNAL ret=0x00017003 nal_size=1239 frame#16400
+[ 774.72] MVD: RenderFrame ret=0x00017000
+[ 778.81] MVD: ProcessNAL ret=0x00017003 nal_size=405 frame#16500
+[ 778.83] MVD: RenderFrame ret=0x00017000
+[ 782.92] MVD: ProcessNAL ret=0x00017003 nal_size=727 frame#16600
+[ 782.94] MVD: RenderFrame ret=0x00017000
+[ 787.19] MVD: ProcessNAL ret=0x00017003 nal_size=3546 frame#16700
+[ 787.21] MVD: RenderFrame ret=0x00017000
+[ 791.32] MVD: ProcessNAL ret=0x00017003 nal_size=108 frame#16800
+[ 791.33] MVD: RenderFrame ret=0x00017000
+[ 795.55] MVD: ProcessNAL ret=0x00017003 nal_size=2264 frame#16900
+[ 795.57] MVD: RenderFrame ret=0x00017000
+[ 799.65] MVD: ProcessNAL ret=0x00017003 nal_size=305 frame#17000
+[ 799.66] MVD: RenderFrame ret=0x00017000
+[ 803.90] MVD: ProcessNAL ret=0x00017003 nal_size=201 frame#17100
+[ 803.91] MVD: RenderFrame ret=0x00017000
+[ 807.99] MVD: ProcessNAL ret=0x00017003 nal_size=192 frame#17200
+[ 808.01] MVD: RenderFrame ret=0x00017000
+[ 812.24] MVD: ProcessNAL ret=0x00017003 nal_size=216 frame#17300
+[ 812.26] MVD: RenderFrame ret=0x00017000
+[ 816.35] MVD: ProcessNAL ret=0x00017003 nal_size=105 frame#17400
+[ 816.36] MVD: RenderFrame ret=0x00017000
+[ 820.49] MVD: ProcessNAL ret=0x00017003 nal_size=2935 frame#17500
+[ 820.62] MVD: RenderFrame ret=0x00017000
+[ 824.88] MVD: ProcessNAL ret=0x00017003 nal_size=3899 frame#17600
+[ 825.15] MVD: RenderFrame ret=0x00017000
+[ 829.61] MVD: ProcessNAL ret=0x00017003 nal_size=2316 frame#17700
+[ 829.88] MVD: RenderFrame ret=0x00017000
+[ 834.24] MVD: ProcessNAL ret=0x00017003 nal_size=1736 frame#17800
+[ 834.51] MVD: RenderFrame ret=0x00017000
+[ 838.98] MVD: ProcessNAL ret=0x00017003 nal_size=61 frame#17900
+[ 839.63] MVD: RenderFrame ret=0x00017000
+[ 844.04] MVD: ProcessNAL ret=0x00017003 nal_size=2670 frame#18000
+[ 844.97] MVD: RenderFrame ret=0x00017000
+[ 849.29] MVD: ProcessNAL ret=0x00017003 nal_size=158 frame#18100
+[ 849.90] MVD: RenderFrame ret=0x00017000
+[ 854.37] MVD: ProcessNAL ret=0x00017003 nal_size=243 frame#18200
+[ 854.67] MVD: RenderFrame ret=0x00017000
+[ 859.04] MVD: ProcessNAL ret=0x00017003 nal_size=511 frame#18300
+[ 859.15] MVD: RenderFrame ret=0x00017000
+[ 861.55] VDL: curl=0 http=200 bytes=99334500
+[ 861.60] VDL: saved sdmc:/3ds/jellyfin-3ds/video_c680ae2090190913c20cb42c8316bdeb.ts (99334500 bytes)
+[ 861.62] VDL: downloading http://192.168.12.186:8096/Videos/b3f7dc6eff85a9a1c0e4306437dba74c/stream?UserId=41b9b982ca0c43648ca7ab29e083b269&DeviceId=3ds-0000000b2aea5c0c&VideoCodec=h264&AudioCodec=aac&Container=ts&MaxWidth=400&MaxHeight=240&VideoBitRate=472000&AudioBitRate=128000&MaxAudioChannels=2&TranscodingMaxAudioChannels=2&Profile=Baseline&Level=31&MaxRefFrames=2&MediaSourceId=b3f7dc6eff85a9a1c0e4306437dba74c&PlaySessionId=3dsee22a1dc&api_key=2f25a59809784943a42998f928b8cd8a&SubtitleStreamIndex=2&SubtitleMethod=Encode
+[ 863.36] MVD: ProcessNAL ret=0x00017003 nal_size=3156 frame#18400
+[ 863.38] MVD: RenderFrame ret=0x00017000
+[ 867.47] MVD: ProcessNAL ret=0x00017003 nal_size=390 frame#18500
+[ 867.48] MVD: RenderFrame ret=0x00017000
+[ 871.58] MVD: ProcessNAL ret=0x00017003 nal_size=3586 frame#18600
+[ 871.60] MVD: RenderFrame ret=0x00017000
+[ 875.83] MVD: ProcessNAL ret=0x00017003 nal_size=1042 frame#18700
+[ 875.84] MVD: RenderFrame ret=0x00017000
+[ 879.94] MVD: ProcessNAL ret=0x00017003 nal_size=1859 frame#18800
+[ 879.95] MVD: RenderFrame ret=0x00017000
+[ 884.19] MVD: ProcessNAL ret=0x00017003 nal_size=169 frame#18900
+[ 884.21] MVD: RenderFrame ret=0x00017000
+[ 888.32] MVD: ProcessNAL ret=0x00017003 nal_size=4483 frame#19000
+[ 888.34] MVD: RenderFrame ret=0x00017000
+[ 892.56] MVD: ProcessNAL ret=0x00017003 nal_size=1419 frame#19100
+[ 892.58] MVD: RenderFrame ret=0x00017000
+[ 896.68] MVD: ProcessNAL ret=0x00017003 nal_size=467 frame#19200
+[ 896.70] MVD: RenderFrame ret=0x00017000
+[ 900.93] MVD: ProcessNAL ret=0x00017003 nal_size=1685 frame#19300
+[ 900.95] MVD: RenderFrame ret=0x00017000
+[ 905.05] MVD: ProcessNAL ret=0x00017003 nal_size=562 frame#19400
+[ 905.07] MVD: RenderFrame ret=0x00017000
+[ 909.17] MVD: ProcessNAL ret=0x00017003 nal_size=1124 frame#19500
+[ 909.19] MVD: RenderFrame ret=0x00017000
+[ 913.44] MVD: ProcessNAL ret=0x00017003 nal_size=1597 frame#19600
+[ 913.45] MVD: RenderFrame ret=0x00017000
+[ 917.54] MVD: ProcessNAL ret=0x00017003 nal_size=502 frame#19700
+[ 917.56] MVD: RenderFrame ret=0x00017000
+[ 921.66] MVD: ProcessNAL ret=0x00017003 nal_size=65 frame#19800
+[ 921.67] MVD: RenderFrame ret=0x00017000
+[ 925.92] MVD: ProcessNAL ret=0x00017003 nal_size=6330 frame#19900
+[ 925.94] MVD: RenderFrame ret=0x00017000
+[ 930.04] MVD: ProcessNAL ret=0x00017003 nal_size=1189 frame#20000
+[ 930.06] MVD: RenderFrame ret=0x00017000
+[ 934.31] MVD: ProcessNAL ret=0x00017003 nal_size=2059 frame#20100
+[ 934.33] MVD: RenderFrame ret=0x00017000
+[ 938.43] MVD: ProcessNAL ret=0x00017003 nal_size=2231 frame#20200
+[ 938.44] MVD: RenderFrame ret=0x00017000
+[ 942.68] MVD: ProcessNAL ret=0x00017003 nal_size=328 frame#20300
+[ 942.69] MVD: RenderFrame ret=0x00017000
+[ 946.82] MVD: ProcessNAL ret=0x00017003 nal_size=3558 frame#20400
+[ 946.83] MVD: RenderFrame ret=0x00017000
+[ 950.93] MVD: ProcessNAL ret=0x00017003 nal_size=30 frame#20500
+[ 950.96] MVD: RenderFrame ret=0x00017000
+[ 955.09] MVD: ProcessNAL ret=0x00017003 nal_size=1324 frame#20600
+[ 955.11] MVD: RenderFrame ret=0x00017000
+[ 959.35] MVD: ProcessNAL ret=0x00017003 nal_size=484 frame#20700
+[ 959.38] MVD: RenderFrame ret=0x00017000
+[ 963.45] MVD: ProcessNAL ret=0x00017003 nal_size=1847 frame#20800
+[ 963.89] MVD: RenderFrame ret=0x00017000
+[ 968.36] MVD: ProcessNAL ret=0x00017003 nal_size=3722 frame#20900
+[ 968.84] MVD: RenderFrame ret=0x00017000
+[ 973.18] MVD: ProcessNAL ret=0x00017003 nal_size=2770 frame#21000
+[ 975.12] MVD: RenderFrame ret=0x00017000
+[ 979.50] MVD: ProcessNAL ret=0x00017003 nal_size=13004 frame#21100
+[ 979.76] MVD: RenderFrame ret=0x00017000
+[ 985.44] MVD: ProcessNAL ret=0x00017003 nal_size=3383 frame#21200
+[ 985.98] MVD: RenderFrame ret=0x00017000
+[ 990.33] MVD: ProcessNAL ret=0x00017003 nal_size=166 frame#21300
+[ 991.33] MVD: RenderFrame ret=0x00017000
+[ 995.65] MVD: ProcessNAL ret=0x00017003 nal_size=1620 frame#21400
+[ 996.30] MVD: RenderFrame ret=0x00017000
+[1000.80] MVD: ProcessNAL ret=0x00017003 nal_size=3562 frame#21500
+[1000.82] MVD: RenderFrame ret=0x00017000
+[1004.91] MVD: ProcessNAL ret=0x00017003 nal_size=269 frame#21600
+[1004.95] MVD: RenderFrame ret=0x00017000
+[1009.18] MVD: ProcessNAL ret=0x00017003 nal_size=10162 frame#21700
+[1009.21] MVD: RenderFrame ret=0x00017000
+[1013.40] MVD: ProcessNAL ret=0x00017003 nal_size=435 frame#21800
+[1013.47] MVD: RenderFrame ret=0x00017000
+[1017.59] MVD: ProcessNAL ret=0x00017003 nal_size=822 frame#21900
+[1017.61] MVD: RenderFrame ret=0x00017000
+[1021.70] MVD: ProcessNAL ret=0x00017003 nal_size=183 frame#22000
+[1021.73] MVD: RenderFrame ret=0x00017000
+[1025.96] MVD: ProcessNAL ret=0x00017003 nal_size=3376 frame#22100
+[1026.14] MVD: RenderFrame ret=0x00017000
+[1030.24] MVD: ProcessNAL ret=0x00017003 nal_size=223 frame#22200
+[1030.28] MVD: RenderFrame ret=0x00017000
+[1034.55] MVD: ProcessNAL ret=0x00017003 nal_size=1271 frame#22300
+[1034.59] MVD: RenderFrame ret=0x00017000
+[1038.69] MVD: ProcessNAL ret=0x00017003 nal_size=1587 frame#22400
+[1038.73] MVD: RenderFrame ret=0x00017000
+[1042.82] MVD: ProcessNAL ret=0x00017003 nal_size=4000 frame#22500
+[1042.87] MVD: RenderFrame ret=0x00017000
+[1047.09] MVD: ProcessNAL ret=0x00017003 nal_size=4289 frame#22600
+[1047.55] MVD: RenderFrame ret=0x00017000
+[1051.71] MVD: ProcessNAL ret=0x00017003 nal_size=165 frame#22700
+[1051.76] MVD: RenderFrame ret=0x00017000
+[1055.84] MVD: ProcessNAL ret=0x00017003 nal_size=84 frame#22800
+[1055.88] MVD: RenderFrame ret=0x00017000
+[1060.11] MVD: ProcessNAL ret=0x00017003 nal_size=266 frame#22900
+[1060.14] MVD: RenderFrame ret=0x00017000
+[1064.23] MVD: ProcessNAL ret=0x00017003 nal_size=866 frame#23000
+[1065.83] MVD: RenderFrame ret=0x00017000
+[1070.07] MVD: ProcessNAL ret=0x00017003 nal_size=1603 frame#23100
+[1070.13] MVD: RenderFrame ret=0x00017000
+[1074.22] MVD: ProcessNAL ret=0x00017003 nal_size=50 frame#23200
+[1074.26] MVD: RenderFrame ret=0x00017000
+[1078.35] MVD: ProcessNAL ret=0x00017003 nal_size=86 frame#23300
+[1078.44] MVD: RenderFrame ret=0x00017000
+[1082.71] MVD: ProcessNAL ret=0x00017003 nal_size=292 frame#23400
+[1082.78] MVD: RenderFrame ret=0x00017000
+[1086.87] MVD: ProcessNAL ret=0x00017003 nal_size=65 frame#23500
+[1086.91] MVD: RenderFrame ret=0x00017000
+[1091.16] MVD: ProcessNAL ret=0x00017003 nal_size=397 frame#23600
+[1091.37] MVD: RenderFrame ret=0x00017000
+[1095.47] MVD: ProcessNAL ret=0x00017003 nal_size=237 frame#23700
+[1095.52] MVD: RenderFrame ret=0x00017000
+[1099.72] MVD: ProcessNAL ret=0x00017003 nal_size=3205 frame#23800
+[1099.78] MVD: RenderFrame ret=0x00017000
+[1103.87] MVD: ProcessNAL ret=0x00017003 nal_size=1463 frame#23900
+[1104.00] MVD: RenderFrame ret=0x00017000
+[1108.08] MVD: ProcessNAL ret=0x00017003 nal_size=4145 frame#24000
+[1108.14] MVD: RenderFrame ret=0x00017000
+[1112.38] MVD: ProcessNAL ret=0x00017003 nal_size=1731 frame#24100
+[1112.43] MVD: RenderFrame ret=0x00017000
+[1116.55] MVD: ProcessNAL ret=0x00017003 nal_size=2885 frame#24200
+[1116.61] MVD: RenderFrame ret=0x00017000
+[1120.81] MVD: ProcessNAL ret=0x00017003 nal_size=835 frame#24300
+[1120.87] MVD: RenderFrame ret=0x00017000
+[1124.97] MVD: ProcessNAL ret=0x00017003 nal_size=12439 frame#24400
+[1125.37] MVD: RenderFrame ret=0x00017000
+[1129.67] MVD: ProcessNAL ret=0x00017003 nal_size=327 frame#24500
+[1129.71] MVD: RenderFrame ret=0x00017000
+[1133.81] MVD: ProcessNAL ret=0x00017003 nal_size=6836 frame#24600
+[1133.84] MVD: RenderFrame ret=0x00017000
+[1138.06] MVD: ProcessNAL ret=0x00017003 nal_size=192 frame#24700
+[1138.08] MVD: RenderFrame ret=0x00017000
+[1142.17] MVD: ProcessNAL ret=0x00017003 nal_size=3307 frame#24800
+[1142.19] MVD: RenderFrame ret=0x00017000
+[1146.28] MVD: ProcessNAL ret=0x00017003 nal_size=2641 frame#24900
+[1146.30] MVD: RenderFrame ret=0x00017000
+[1150.55] MVD: ProcessNAL ret=0x00017003 nal_size=3179 frame#25000
+[1150.57] MVD: RenderFrame ret=0x00017000
+[1154.66] MVD: ProcessNAL ret=0x00017003 nal_size=309 frame#25100
+[1154.68] MVD: RenderFrame ret=0x00017000
+[1158.91] MVD: ProcessNAL ret=0x00017003 nal_size=326 frame#25200
+[1159.09] MVD: RenderFrame ret=0x00017000
+[1163.21] MVD: ProcessNAL ret=0x00017003 nal_size=3815 frame#25300
+[1163.23] MVD: RenderFrame ret=0x00017000
+[1167.34] MVD: ProcessNAL ret=0x00017003 nal_size=400 frame#25400
+[1167.36] MVD: RenderFrame ret=0x00017000
+[1171.60] MVD: ProcessNAL ret=0x00017003 nal_size=1804 frame#25500
+[1171.64] MVD: RenderFrame ret=0x00017000
+[1175.73] MVD: ProcessNAL ret=0x00017003 nal_size=171 frame#25600
+[1175.75] MVD: RenderFrame ret=0x00017000
+[1179.98] MVD: ProcessNAL ret=0x00017003 nal_size=850 frame#25700
+[1180.00] MVD: RenderFrame ret=0x00017000
+[1184.09] MVD: ProcessNAL ret=0x00017003 nal_size=3076 frame#25800
+[1184.11] MVD: RenderFrame ret=0x00017000
+[1188.22] MVD: ProcessNAL ret=0x00017003 nal_size=16 frame#25900
+[1188.24] MVD: RenderFrame ret=0x00017000
+[1192.49] MVD: ProcessNAL ret=0x00017003 nal_size=3431 frame#26000
+[1192.51] MVD: RenderFrame ret=0x00017000
+[1196.60] MVD: ProcessNAL ret=0x00017003 nal_size=303 frame#26100
+[1196.65] MVD: RenderFrame ret=0x00017000
+[1200.92] MVD: ProcessNAL ret=0x00017003 nal_size=1344 frame#26200
+[1200.94] MVD: RenderFrame ret=0x00017000
+[1205.03] MVD: ProcessNAL ret=0x00017003 nal_size=2257 frame#26300
+[1205.05] MVD: RenderFrame ret=0x00017000
+[1209.26] MVD: ProcessNAL ret=0x00017003 nal_size=81 frame#26400
+[1209.28] MVD: RenderFrame ret=0x00017000
+[1213.40] MVD: ProcessNAL ret=0x00017003 nal_size=2785 frame#26500
+[1213.42] MVD: RenderFrame ret=0x00017000
+[1217.51] MVD: ProcessNAL ret=0x00017003 nal_size=2402 frame#26600
+[1217.53] MVD: RenderFrame ret=0x00017000
+[1218.57] VDL: curl=0 http=200 bytes=107758216
+[1218.65] VDL: saved sdmc:/3ds/jellyfin-3ds/video_b3f7dc6eff85a9a1c0e4306437dba74c.ts (107758216 bytes)
+[1221.78] MVD: ProcessNAL ret=0x00017003 nal_size=2396 frame#26700
+[1221.80] MVD: RenderFrame ret=0x00017000
+[1225.88] MVD: ProcessNAL ret=0x00017003 nal_size=1612 frame#26800
+[1225.91] MVD: RenderFrame ret=0x00017000
+[1230.13] MVD: ProcessNAL ret=0x00017003 nal_size=2126 frame#26900
+[1230.15] MVD: RenderFrame ret=0x00017000
+[1234.25] MVD: ProcessNAL ret=0x00017003 nal_size=1755 frame#27000
+[1234.27] MVD: RenderFrame ret=0x00017000
+[1238.51] MVD: ProcessNAL ret=0x00017003 nal_size=1687 frame#27100
+[1238.53] MVD: RenderFrame ret=0x00017000
+[1242.67] MVD: ProcessNAL ret=0x00017003 nal_size=217 frame#27200
+[1242.69] MVD: RenderFrame ret=0x00017000
+[1246.80] MVD: ProcessNAL ret=0x00017003 nal_size=2566 frame#27300
+[1246.82] MVD: RenderFrame ret=0x00017000
+[1250.90] MVD: ProcessNAL ret=0x00017003 nal_size=171 frame#27400
+[1250.92] MVD: RenderFrame ret=0x00017000
+[1255.22] MVD: ProcessNAL ret=0x00017003 nal_size=2666 frame#27500
+[1255.28] MVD: RenderFrame ret=0x00017000
+[1259.41] MVD: ProcessNAL ret=0x00017003 nal_size=1522 frame#27600
+[1259.46] MVD: RenderFrame ret=0x00017000
+[1263.70] MVD: ProcessNAL ret=0x00017003 nal_size=876 frame#27700
+[1263.75] MVD: RenderFrame ret=0x00017000
+[1267.88] MVD: ProcessNAL ret=0x00017003 nal_size=2047 frame#27800
+[1267.93] MVD: RenderFrame ret=0x00017000
+[1272.05] MVD: ProcessNAL ret=0x00017003 nal_size=639 frame#27900
+[1272.10] MVD: RenderFrame ret=0x00017000
+[1276.34] MVD: ProcessNAL ret=0x00017003 nal_size=758 frame#28000
+[1276.36] MVD: RenderFrame ret=0x00017000
+[1280.45] MVD: ProcessNAL ret=0x00017003 nal_size=742 frame#28100
+[1280.47] MVD: RenderFrame ret=0x00017000
+[1284.74] MVD: ProcessNAL ret=0x00017003 nal_size=2585 frame#28200
+[1284.76] MVD: RenderFrame ret=0x00017000
+[1288.84] MVD: ProcessNAL ret=0x00017003 nal_size=1736 frame#28300
+[1288.86] MVD: RenderFrame ret=0x00017000
+[1293.08] MVD: ProcessNAL ret=0x00017003 nal_size=2007 frame#28400
+[1293.10] MVD: RenderFrame ret=0x00017000
+[1297.18] MVD: ProcessNAL ret=0x00017003 nal_size=1567 frame#28500
+[1297.20] MVD: RenderFrame ret=0x00017000
+[1301.31] MVD: ProcessNAL ret=0x00017003 nal_size=2012 frame#28600
+[1301.33] MVD: RenderFrame ret=0x00017000
+[1305.56] MVD: ProcessNAL ret=0x00017003 nal_size=231 frame#28700
+[1305.58] MVD: RenderFrame ret=0x00017000
+[1309.67] MVD: ProcessNAL ret=0x00017003 nal_size=1786 frame#28800
+[1309.69] MVD: RenderFrame ret=0x00017000
+[1313.81] PLAY: starting video, url_len=64 seek=0 3d=0
+[1313.83] NET: curl done, result=23 (Failed writing received data to disk/application), http=200, ring_fill=524288 attempt=0
+[1313.85] CONV: thread exiting
+[1313.86] PLAY: creating threads, prio=48
+[1313.87] NET: thread started
+[1313.88] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1313.90] DEC: thread started, waiting for prefetch (32768 bytes)
+[1313.92] CONV: thread started
+[1313.93] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1313.97] DEC: prefetch done, fill=65536 finished=0
+[1314.45] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1314.50] DEC: MVD OK 336x240
+[1314.52] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1314.55] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1314.59] AUDIO: found decoder 'aac'
+[1314.63] AUDIO: decoder opened (swr deferred to first frame)
+[1314.65] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1314.68] MVD: ProcessNAL ret=0x00017004 nal_size=996 frame#28900
+[1314.72] MVD: RenderFrame ret=0x00017000
+[1314.75] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1316.24] NET: local file done
+[1316.26] CONV: thread exiting
+[1316.28] PLAY: starting video, url_len=64 seek=329441666 3d=0
+[1316.30] PLAY: creating threads, prio=48
+[1316.31] NET: thread started
+[1316.33] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1316.34] DEC: thread started, waiting for prefetch (32768 bytes)
+[1316.36] CONV: thread started
+[1316.37] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1316.38] NET: local seek to 2470696B (32.9s of 1327.9s)
+[1316.43] DEC: prefetch done, fill=65536 finished=0
+[1316.95] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1317.01] DEC: MVD OK 336x240
+[1317.04] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1317.06] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1317.09] AUDIO: found decoder 'aac'
+[1317.11] AUDIO: decoder opened (swr deferred to first frame)
+[1317.13] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1317.15] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1317.24] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.27] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.29] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.31] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.43] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.46] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.47] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.48] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.60] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.62] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.64] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.65] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.78] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.79] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.81] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.82] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.84] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.95] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.97] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.98] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1317.99] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1318.12] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1318.14] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1319.84] MVD: ProcessNAL ret=0x00017003 nal_size=3608 frame#29000
+[1319.86] MVD: RenderFrame ret=0x00017000
+[1323.84] NET: local file done
+[1323.86] CONV: thread exiting
+[1323.88] PLAY: starting video, url_len=64 seek=1000891666 3d=0
+[1323.89] PLAY: creating threads, prio=48
+[1323.90] NET: thread started
+[1323.91] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1323.92] DEC: thread started, waiting for prefetch (32768 bytes)
+[1323.94] CONV: thread started
+[1323.96] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1323.97] NET: local seek to 7506652B (100.1s of 1327.9s)
+[1324.01] DEC: prefetch done, fill=65536 finished=0
+[1324.67] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1324.77] DEC: MVD OK 336x240
+[1324.84] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1324.90] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1324.94] AUDIO: found decoder 'aac'
+[1325.01] AUDIO: decoder opened (swr deferred to first frame)
+[1325.06] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1325.11] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1325.16] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1325.21] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1325.38] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1325.43] MVD: ProcessNAL ret=0xD96170CA nal_size=2609 frame#29100
+[1325.46] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1325.47] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1325.48] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1325.59] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1325.61] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1325.63] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1325.64] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1325.76] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1325.79] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1325.80] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1325.81] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1325.94] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1325.95] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1325.96] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1325.98] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.11] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.12] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.14] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.15] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.28] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.30] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.31] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.32] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.45] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.47] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.48] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.49] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.62] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.63] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.65] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.66] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.79] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.80] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.82] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.83] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.97] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1326.99] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.00] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.01] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.14] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.16] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.17] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.19] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.20] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.31] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.33] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.35] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.36] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.49] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.50] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.52] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.54] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.66] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.67] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.69] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.70] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.83] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.84] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.86] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1327.87] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.00] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.02] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.03] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.05] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.17] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.19] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.20] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.21] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.34] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.35] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.37] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.38] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.51] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.53] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.54] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.55] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.68] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.70] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.71] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.79] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1328.95] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1329.01] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1329.07] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1329.11] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1329.26] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1329.31] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1329.35] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1329.39] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1329.44] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1329.56] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1329.58] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1329.59] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1329.61] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1329.93] MVD: ProcessNAL ret=0x00017003 nal_size=2503 frame#29200
+[1329.95] MVD: RenderFrame ret=0x00017000
+[1334.18] MVD: ProcessNAL ret=0x00017003 nal_size=308 frame#29300
+[1334.20] MVD: RenderFrame ret=0x00017000
+[1338.29] MVD: ProcessNAL ret=0x00017003 nal_size=940 frame#29400
+[1338.30] MVD: RenderFrame ret=0x00017000
+[1342.56] MVD: ProcessNAL ret=0x00017003 nal_size=3334 frame#29500
+[1342.58] MVD: RenderFrame ret=0x00017000
+[1346.68] MVD: ProcessNAL ret=0x00017003 nal_size=909 frame#29600
+[1346.71] MVD: RenderFrame ret=0x00017000
+[1348.08] NET: local file done
+[1348.11] CONV: thread exiting
+[1362.83] PLAY: starting video, url_len=64 seek=0 3d=0
+[1362.85] PLAY: creating threads, prio=48
+[1362.86] NET: thread started
+[1362.87] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1362.88] DEC: thread started, waiting for prefetch (32768 bytes)
+[1362.91] CONV: thread started
+[1362.92] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1362.96] DEC: prefetch done, fill=65536 finished=0
+[1363.44] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1363.50] DEC: MVD OK 336x240
+[1363.51] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1363.55] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1363.58] AUDIO: found decoder 'aac'
+[1363.62] AUDIO: decoder opened (swr deferred to first frame)
+[1363.65] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1363.68] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1364.69] NET: local file done
+[1364.72] CONV: thread exiting
+[1364.73] PLAY: starting video, url_len=64 seek=324436666 3d=0
+[1364.74] PLAY: creating threads, prio=48
+[1364.75] NET: thread started
+[1364.77] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1364.78] DEC: thread started, waiting for prefetch (32768 bytes)
+[1364.80] CONV: thread started
+[1364.81] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1364.82] NET: local seek to 2433096B (32.4s of 1327.9s)
+[1364.86] DEC: prefetch done, fill=65536 finished=0
+[1365.42] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1365.48] DEC: MVD OK 336x240
+[1365.51] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1365.52] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1365.54] AUDIO: found decoder 'aac'
+[1365.57] AUDIO: decoder opened (swr deferred to first frame)
+[1365.60] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1365.61] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1365.72] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1365.77] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1365.80] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1365.93] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1365.95] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1365.96] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1365.97] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1366.10] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1366.12] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1366.13] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1366.14] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1366.27] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1366.30] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1366.31] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1366.32] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1366.44] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1366.46] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1366.47] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1366.49] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1366.56] CONV: thread exiting
+[1366.58] NET: local file done
+[1366.59] PLAY: starting video, url_len=64 seek=932489999 3d=0
+[1366.61] PLAY: creating threads, prio=48
+[1366.63] NET: thread started
+[1366.64] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1366.65] DEC: thread started, waiting for prefetch (32768 bytes)
+[1366.67] CONV: thread started
+[1366.68] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1366.70] NET: local seek to 6993600B (93.2s of 1327.9s)
+[1366.74] DEC: prefetch done, fill=65536 finished=0
+[1367.27] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1367.32] DEC: MVD OK 336x240
+[1367.35] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1367.37] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1367.40] AUDIO: found decoder 'aac'
+[1367.42] AUDIO: decoder opened (swr deferred to first frame)
+[1367.45] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1367.48] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1367.57] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1367.67] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1367.85] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1367.90] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1367.97] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1368.01] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1368.15] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1368.20] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1368.24] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1368.29] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1368.33] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1368.47] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1368.52] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1368.54] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1368.55] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1368.66] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1368.68] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1368.69] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1368.71] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1368.84] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1368.86] MVD: ProcessNAL ret=0x00017004 nal_size=12890 frame#29700
+[1368.87] MVD: RenderFrame ret=0x00017000
+[1372.95] MVD: ProcessNAL ret=0x00017003 nal_size=309 frame#29800
+[1372.97] MVD: RenderFrame ret=0x00017000
+[1377.18] MVD: ProcessNAL ret=0x00017003 nal_size=2859 frame#29900
+[1377.21] MVD: RenderFrame ret=0x00017000
+[1381.30] MVD: ProcessNAL ret=0x00017003 nal_size=1557 frame#30000
+[1381.31] MVD: RenderFrame ret=0x00017000
+[1385.55] MVD: ProcessNAL ret=0x00017003 nal_size=1588 frame#30100
+[1385.56] MVD: RenderFrame ret=0x00017000
+[1389.66] MVD: ProcessNAL ret=0x00017003 nal_size=1446 frame#30200
+[1389.68] MVD: RenderFrame ret=0x00017000
+[1393.93] MVD: ProcessNAL ret=0x00017003 nal_size=6584 frame#30300
+[1393.94] MVD: RenderFrame ret=0x00017000
+[1398.05] MVD: ProcessNAL ret=0x00017003 nal_size=942 frame#30400
+[1398.06] MVD: RenderFrame ret=0x00017000
+[1402.16] MVD: ProcessNAL ret=0x00017003 nal_size=3904 frame#30500
+[1402.18] MVD: RenderFrame ret=0x00017000
+[1406.41] MVD: ProcessNAL ret=0x00017003 nal_size=1101 frame#30600
+[1406.44] MVD: RenderFrame ret=0x00017000
+[1408.82] NAV: into 'Shows' id=a656b907eb3a73532e40e44b968d0225 depth=1 items=30
+[1410.52] MVD: ProcessNAL ret=0x00017003 nal_size=111 frame#30700
+[1410.54] MVD: RenderFrame ret=0x00017000
+[1413.57] NAV: into 'Anime Shows' id=29391378c4118b35b77f84980d25f0a6 depth=1 items=18
+[1414.78] MVD: ProcessNAL ret=0x00017003 nal_size=696 frame#30800
+[1414.80] MVD: RenderFrame ret=0x00017000
+[1415.42] NAV: into 'Zatch Bell!' id=557ddd620c0eec6a2e01b2f4736ff91c depth=2 items=1
+[1416.35] NAV: into 'Season 1' id=a10cd6c702592d2e636fa5b3107ab51a depth=3 items=50
+[1418.91] MVD: ProcessNAL ret=0x00017003 nal_size=412 frame#30900
+[1418.93] MVD: RenderFrame ret=0x00017000
+[1423.03] MVD: ProcessNAL ret=0x00017003 nal_size=471 frame#31000
+[1423.06] MVD: RenderFrame ret=0x00017000
+[1427.25] MVD: ProcessNAL ret=0x00017003 nal_size=573 frame#31100
+[1427.27] MVD: RenderFrame ret=0x00017000
+[1431.38] MVD: ProcessNAL ret=0x00017003 nal_size=105 frame#31200
+[1431.40] MVD: RenderFrame ret=0x00017000
+[1435.63] MVD: ProcessNAL ret=0x00017003 nal_size=376 frame#31300
+[1435.65] MVD: RenderFrame ret=0x00017000
+[1439.74] MVD: ProcessNAL ret=0x00017003 nal_size=1843 frame#31400
+[1439.76] MVD: RenderFrame ret=0x00017000
+[1441.04] NET: local file done
+[1441.06] CONV: thread exiting
+[1441.07] PLAY: starting video, url_len=64 seek=2818069554 3d=0
+[1441.08] PLAY: creating threads, prio=48
+[1441.09] NET: thread started
+[1441.10] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1441.11] DEC: thread started, waiting for prefetch (32768 bytes)
+[1441.14] CONV: thread started
+[1441.15] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1441.16] NET: local seek to 21135336B (281.8s of 1327.9s)
+[1441.20] DEC: prefetch done, fill=65536 finished=0
+[1441.82] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1441.88] DEC: MVD OK 336x240
+[1441.91] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1441.93] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1441.95] AUDIO: found decoder 'aac'
+[1441.98] AUDIO: decoder opened (swr deferred to first frame)
+[1442.00] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1442.01] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1442.12] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1442.17] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1442.30] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1442.31] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1442.33] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1442.34] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1442.52] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1442.58] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1442.63] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1442.68] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1442.82] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1442.89] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1442.93] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1442.98] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.02] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.18] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.21] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.22] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.23] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.35] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.37] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.38] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.40] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.52] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.54] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.55] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.57] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.70] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.71] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.73] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.74] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.87] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.88] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.90] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1443.91] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1444.04] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1444.05] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1444.07] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1444.08] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1444.21] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1444.23] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1444.24] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1444.25] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1444.38] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1444.40] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1444.41] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1444.42] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1445.43] MVD: ProcessNAL ret=0x00017003 nal_size=203 frame#31500
+[1445.45] MVD: RenderFrame ret=0x00017000
+[1447.52] NET: local file done
+[1447.54] CONV: thread exiting
+[1447.56] PLAY: starting video, url_len=64 seek=5590968331 3d=0
+[1447.57] PLAY: creating threads, prio=48
+[1447.58] NET: thread started
+[1447.60] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1447.61] DEC: thread started, waiting for prefetch (32768 bytes)
+[1447.63] CONV: thread started
+[1447.64] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1447.66] NET: local seek to 41932084B (559.1s of 1327.9s)
+[1447.70] DEC: prefetch done, fill=65536 finished=0
+[1448.25] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1448.31] DEC: MVD OK 336x240
+[1448.33] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1448.37] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1448.40] AUDIO: found decoder 'aac'
+[1448.43] AUDIO: decoder opened (swr deferred to first frame)
+[1448.45] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1448.46] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1448.56] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1448.59] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1448.60] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1448.73] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1448.75] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1448.76] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1448.78] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1448.90] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1448.92] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1448.93] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1448.94] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1449.07] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1449.09] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1449.10] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1449.11] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1449.24] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1449.27] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1449.28] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1449.29] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1449.41] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1449.43] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1449.45] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1449.46] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1449.56] CONV: thread exiting
+[1449.58] NET: local file done
+[1449.60] PLAY: starting video, url_len=64 seek=11177928331 3d=0
+[1449.61] PLAY: creating threads, prio=48
+[1449.63] NET: thread started
+[1449.64] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1449.65] DEC: thread started, waiting for prefetch (32768 bytes)
+[1449.67] CONV: thread started
+[1449.69] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1449.70] NET: local seek to 83834276B (1117.8s of 1327.9s)
+[1449.74] DEC: prefetch done, fill=65536 finished=0
+[1449.88] CONV: thread exiting
+[1450.07] NET: local file done
+[1450.11] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1450.15] DEC: MVD OK 336x240
+[1450.17] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1450.18] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1450.19] AUDIO: found decoder 'aac'
+[1450.26] AUDIO: decoder opened (swr deferred to first frame)
+[1450.32] PLAY: starting video, url_len=64 seek=10877928331 3d=0
+[1450.38] PLAY: creating threads, prio=48
+[1450.42] NET: thread started
+[1450.46] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1450.52] DEC: thread started, waiting for prefetch (32768 bytes)
+[1450.58] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1450.62] CONV: thread started
+[1450.66] NET: local seek to 81584292B (1087.8s of 1327.9s)
+[1450.73] DEC: prefetch done, fill=65536 finished=0
+[1451.36] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1451.45] DEC: MVD OK 336x240
+[1451.49] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1451.51] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1451.54] AUDIO: found decoder 'aac'
+[1451.56] AUDIO: decoder opened (swr deferred to first frame)
+[1451.58] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1451.60] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1451.70] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1451.73] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1451.75] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1451.88] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1451.90] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1451.91] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1451.92] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1452.05] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1452.07] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1452.08] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1452.09] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1452.22] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1452.24] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1452.25] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1452.27] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1452.39] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1452.41] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1452.43] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1452.75] MVD: ProcessNAL ret=0x00017003 nal_size=1759 frame#31600
+[1452.77] MVD: RenderFrame ret=0x00017000
+[1456.85] MVD: ProcessNAL ret=0x00017003 nal_size=84 frame#31700
+[1456.86] MVD: RenderFrame ret=0x00017000
+[1457.40] NET: local file done
+[1457.43] CONV: thread exiting
+[1457.45] PLAY: starting video, url_len=64 seek=13750450000 3d=0
+[1457.47] PLAY: creating threads, prio=48
+[1457.48] NET: thread started
+[1457.49] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1457.51] DEC: thread started, waiting for prefetch (32768 bytes)
+[1457.53] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1457.54] CONV: thread started
+[1457.57] DEC: prefetch done, fill=65536 finished=0
+[1458.06] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1458.11] DEC: MVD OK 336x240
+[1458.13] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1458.16] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1458.20] AUDIO: found decoder 'aac'
+[1458.24] AUDIO: decoder opened (swr deferred to first frame)
+[1458.27] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1458.30] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1461.95] MVD: ProcessNAL ret=0x00017003 nal_size=3008 frame#31800
+[1461.96] MVD: RenderFrame ret=0x00017000
+[1465.04] NET: local file done
+[1465.06] CONV: thread exiting
+[1465.07] PLAY: starting video, url_len=64 seek=13750450000 3d=0
+[1465.08] PLAY: creating threads, prio=48
+[1465.09] NET: thread started
+[1465.11] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1465.12] DEC: thread started, waiting for prefetch (32768 bytes)
+[1465.14] CONV: thread started
+[1465.15] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1465.19] DEC: prefetch done, fill=65536 finished=0
+[1465.68] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1465.73] DEC: MVD OK 336x240
+[1465.75] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1465.78] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1465.82] AUDIO: found decoder 'aac'
+[1465.86] AUDIO: decoder opened (swr deferred to first frame)
+[1465.89] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1465.92] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1466.84] MVD: ProcessNAL ret=0x00017003 nal_size=2186 frame#31900
+[1466.86] MVD: RenderFrame ret=0x00017000
+[1466.98] NET: local file done
+[1466.99] CONV: thread exiting
+[1467.01] PLAY: starting video, url_len=64 seek=13750450000 3d=0
+[1467.03] PLAY: creating threads, prio=48
+[1467.04] NET: thread started
+[1467.05] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1467.07] DEC: thread started, waiting for prefetch (32768 bytes)
+[1467.09] CONV: thread started
+[1467.10] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1467.13] DEC: prefetch done, fill=65536 finished=0
+[1467.62] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1467.72] DEC: MVD OK 336x240
+[1467.79] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1467.86] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1467.93] AUDIO: found decoder 'aac'
+[1467.99] AUDIO: decoder opened (swr deferred to first frame)
+[1468.04] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1468.09] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1469.10] NET: local file done
+[1469.15] CONV: thread exiting
+[1469.19] PLAY: starting video, url_len=64 seek=13750450000 3d=0
+[1469.24] PLAY: creating threads, prio=48
+[1469.25] NET: thread started
+[1469.26] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1469.28] DEC: thread started, waiting for prefetch (32768 bytes)
+[1469.30] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1469.31] CONV: thread started
+[1469.34] DEC: prefetch done, fill=65536 finished=0
+[1469.82] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1469.83] NET: local file done
+[1469.86] CONV: thread exiting
+[1469.88] DEC: MVD OK 336x240
+[1469.89] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1469.90] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1469.93] AUDIO: found decoder 'aac'
+[1469.95] AUDIO: decoder opened (swr deferred to first frame)
+[1469.97] PLAY: starting video, url_len=64 seek=13450450000 3d=0
+[1469.99] PLAY: creating threads, prio=48
+[1470.00] NET: thread started
+[1470.01] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1470.02] DEC: thread started, waiting for prefetch (32768 bytes)
+[1470.05] CONV: thread started
+[1470.06] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1470.07] DEC: stop during prefetch
+[1470.08] NET: local file done
+[1470.09] CONV: thread exiting
+[1470.10] PLAY: starting video, url_len=64 seek=13150450000 3d=0
+[1470.12] PLAY: creating threads, prio=48
+[1470.13] NET: thread started
+[1470.14] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1470.15] DEC: thread started, waiting for prefetch (32768 bytes)
+[1470.17] CONV: thread started
+[1470.18] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1470.20] NET: local seek to 98628372B (1315.0s of 1327.9s)
+[1470.24] DEC: prefetch done, fill=65536 finished=0
+[1470.32] CONV: thread exiting
+[1470.47] NET: local file done
+[1470.48] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1470.52] DEC: MVD OK 336x240
+[1470.54] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1470.55] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1470.56] AUDIO: found decoder 'aac'
+[1470.58] AUDIO: decoder opened (swr deferred to first frame)
+[1470.59] PLAY: starting video, url_len=64 seek=12850450000 3d=0
+[1470.61] PLAY: creating threads, prio=48
+[1470.62] NET: thread started
+[1470.63] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1470.64] DEC: thread started, waiting for prefetch (32768 bytes)
+[1470.66] CONV: thread started
+[1470.67] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1470.69] NET: local seek to 96378200B (1285.0s of 1327.9s)
+[1470.70] CONV: thread exiting
+[1470.72] DEC: stop during prefetch
+[1470.74] NET: local file done
+[1470.75] PLAY: starting video, url_len=64 seek=12550450000 3d=0
+[1470.76] PLAY: creating threads, prio=48
+[1470.77] NET: thread started
+[1470.82] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1470.83] DEC: thread started, waiting for prefetch (32768 bytes)
+[1470.85] CONV: thread started
+[1470.87] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1470.88] NET: local seek to 94128216B (1255.0s of 1327.9s)
+[1470.92] DEC: prefetch done, fill=65536 finished=0
+[1471.45] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1471.51] DEC: MVD OK 336x240
+[1471.53] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1471.55] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1471.57] AUDIO: found decoder 'aac'
+[1471.60] AUDIO: decoder opened (swr deferred to first frame)
+[1471.62] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1471.65] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1471.67] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1471.69] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1471.81] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1471.83] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1471.84] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1471.85] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1471.87] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1471.98] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1472.00] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1472.01] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1472.02] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1472.15] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1472.18] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1472.19] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1472.20] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1472.32] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1472.34] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1472.36] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1472.38] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1472.49] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1472.51] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1472.57] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1472.63] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1472.80] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1472.85] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1472.89] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1472.94] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1473.08] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1473.13] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1473.17] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1473.21] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1473.29] CONV: thread exiting
+[1473.34] NET: local file done
+[1473.38] PLAY: starting video, url_len=64 seek=13750450000 3d=0
+[1473.39] PLAY: creating threads, prio=48
+[1473.40] NET: thread started
+[1473.41] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1473.42] DEC: thread started, waiting for prefetch (32768 bytes)
+[1473.45] CONV: thread started
+[1473.46] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1473.49] DEC: prefetch done, fill=65536 finished=0
+[1473.98] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1474.03] DEC: MVD OK 336x240
+[1474.05] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1474.08] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1474.12] AUDIO: found decoder 'aac'
+[1474.15] AUDIO: decoder opened (swr deferred to first frame)
+[1474.18] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1474.21] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1475.12] NET: local file done
+[1475.16] CONV: thread exiting
+[1475.18] PLAY: starting video, url_len=64 seek=13473635444 3d=0
+[1475.20] PLAY: creating threads, prio=48
+[1475.22] NET: thread started
+[1475.23] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1475.24] DEC: thread started, waiting for prefetch (32768 bytes)
+[1475.26] CONV: thread started
+[1475.27] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1475.30] DEC: prefetch done, fill=65536 finished=0
+[1475.37] NET: local file done
+[1475.48] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1475.50] CONV: thread exiting
+[1475.53] DEC: MVD OK 336x240
+[1475.54] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1475.56] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1475.57] AUDIO: found decoder 'aac'
+[1475.59] AUDIO: decoder opened (swr deferred to first frame)
+[1475.60] PLAY: starting video, url_len=64 seek=13173635444 3d=0
+[1475.61] PLAY: creating threads, prio=48
+[1475.62] NET: thread started
+[1475.63] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1475.65] DEC: thread started, waiting for prefetch (32768 bytes)
+[1475.67] CONV: thread started
+[1475.68] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1475.69] NET: local seek to 98802084B (1317.4s of 1327.9s)
+[1475.72] CONV: thread exiting
+[1475.73] DEC: stop during prefetch
+[1475.74] NET: local file done
+[1475.75] PLAY: starting video, url_len=64 seek=12873635444 3d=0
+[1475.76] PLAY: creating threads, prio=48
+[1475.77] NET: thread started
+[1475.78] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1475.80] DEC: thread started, waiting for prefetch (32768 bytes)
+[1475.82] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1475.83] CONV: thread started
+[1475.85] NET: local seek to 96552100B (1287.4s of 1327.9s)
+[1475.89] DEC: prefetch done, fill=65536 finished=0
+[1476.52] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1476.58] DEC: MVD OK 336x240
+[1476.61] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1476.62] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1476.64] AUDIO: found decoder 'aac'
+[1476.67] AUDIO: decoder opened (swr deferred to first frame)
+[1476.69] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1476.71] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1476.80] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1476.83] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1476.85] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1476.87] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1476.98] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1477.00] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1477.01] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1477.03] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1477.15] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1477.17] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1477.18] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1477.20] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1477.32] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1477.34] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1477.35] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1477.37] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1477.38] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1477.54] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1477.63] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1477.68] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1477.72] MVD: ProcessNAL ret=0xD96170CA nal_size=2853 frame#32000
+[1477.76] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1477.91] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1477.95] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.00] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.04] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.18] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.23] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.25] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.26] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.37] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.39] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.40] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.41] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.54] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.56] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.57] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.59] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.71] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.74] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.75] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.76] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.88] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.90] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.91] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1478.93] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.05] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.07] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.08] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.10] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.23] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.24] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.29] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.30] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.41] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.43] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.44] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.46] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.58] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.60] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.62] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.63] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.64] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.76] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.78] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.79] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.80] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.93] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.95] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.96] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1479.97] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1480.10] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1480.12] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1480.13] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1480.14] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1480.23] CONV: thread exiting
+[1480.25] NET: local file done
+[1519.66] PLAY: starting video, url_len=64 seek=0 3d=0
+[1519.67] PLAY: creating threads, prio=48
+[1519.68] NET: thread started
+[1519.70] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1519.71] DEC: thread started, waiting for prefetch (32768 bytes)
+[1519.73] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1519.74] CONV: thread started
+[1519.77] DEC: prefetch done, fill=65536 finished=0
+[1520.25] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1520.31] DEC: MVD OK 336x240
+[1520.33] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1520.36] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1520.39] AUDIO: found decoder 'aac'
+[1520.42] AUDIO: decoder opened (swr deferred to first frame)
+[1520.45] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1520.48] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1522.05] NET: local file done
+[1522.06] CONV: thread exiting
+[1522.08] PLAY: starting video, url_len=64 seek=329441666 3d=0
+[1522.10] PLAY: creating threads, prio=48
+[1522.11] NET: thread started
+[1522.12] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1522.13] DEC: thread started, waiting for prefetch (32768 bytes)
+[1522.15] CONV: thread started
+[1522.17] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1522.18] NET: local seek to 2470696B (32.9s of 1327.9s)
+[1522.22] DEC: prefetch done, fill=65536 finished=0
+[1522.74] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1522.79] DEC: MVD OK 336x240
+[1522.82] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1522.84] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1522.86] AUDIO: found decoder 'aac'
+[1522.89] AUDIO: decoder opened (swr deferred to first frame)
+[1522.90] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1522.92] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1523.03] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1523.06] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1523.07] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1523.10] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1523.21] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1523.23] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1523.24] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1523.25] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1523.38] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1523.50] MVD: ProcessNAL ret=0xD96170CA nal_size=16 frame#32100
+[1523.55] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1523.60] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1523.64] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1523.78] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1523.83] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1523.87] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1523.92] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1523.96] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1524.10] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1524.18] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1524.20] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1524.22] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1524.32] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1524.34] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1525.67] CONV: thread exiting
+[1525.69] NET: local file done
+[1525.71] PLAY: starting video, url_len=64 seek=956263777 3d=0
+[1525.72] PLAY: creating threads, prio=48
+[1525.73] NET: thread started
+[1525.75] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1525.76] DEC: thread started, waiting for prefetch (32768 bytes)
+[1525.78] CONV: thread started
+[1525.79] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1525.81] NET: local seek to 7171824B (95.6s of 1327.9s)
+[1525.85] DEC: prefetch done, fill=65536 finished=0
+[1526.39] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1526.45] DEC: MVD OK 336x240
+[1526.47] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1526.49] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1526.54] AUDIO: found decoder 'aac'
+[1526.57] AUDIO: decoder opened (swr deferred to first frame)
+[1526.59] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1526.61] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1526.71] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1526.74] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1526.76] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1526.78] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1526.79] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1526.91] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1526.93] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1526.94] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1526.96] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.08] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.10] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.11] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.12] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.25] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.27] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.28] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.29] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.42] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.44] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.45] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.46] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.59] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.61] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.62] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.63] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.76] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.78] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.80] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.81] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.93] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.95] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.96] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1527.97] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1528.10] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1528.12] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1528.13] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1528.14] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1528.27] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1528.97] MVD: ProcessNAL ret=0x00017003 nal_size=473 frame#32200
+[1528.98] MVD: RenderFrame ret=0x00017000
+[1532.14] NET: local file done
+[1532.16] CONV: thread exiting
+[1532.17] PLAY: starting video, url_len=64 seek=2186188332 3d=0
+[1532.18] PLAY: creating threads, prio=48
+[1532.19] NET: thread started
+[1532.21] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1532.22] DEC: thread started, waiting for prefetch (32768 bytes)
+[1532.24] CONV: thread started
+[1532.26] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1532.27] NET: local seek to 16396232B (218.6s of 1327.9s)
+[1532.31] DEC: prefetch done, fill=65536 finished=0
+[1533.02] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1533.08] DEC: MVD OK 336x240
+[1533.11] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1533.12] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1533.15] AUDIO: found decoder 'aac'
+[1533.22] AUDIO: decoder opened (swr deferred to first frame)
+[1533.29] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1533.40] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1533.46] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1533.51] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1533.56] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1533.71] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1533.76] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1533.80] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1533.85] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1533.98] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1534.00] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1534.02] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1534.03] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1534.16] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1534.17] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1534.19] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1534.20] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1534.33] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1534.68] MVD: ProcessNAL ret=0x00017003 nal_size=3738 frame#32300
+[1534.70] MVD: RenderFrame ret=0x00017000
+[1537.56] CONV: thread exiting
+[1537.58] NET: local file done
+[1537.60] PLAY: starting video, url_len=64 seek=4232527887 3d=0
+[1537.61] PLAY: creating threads, prio=48
+[1537.62] NET: thread started
+[1537.63] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1537.64] DEC: thread started, waiting for prefetch (32768 bytes)
+[1537.66] CONV: thread started
+[1537.67] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1537.69] NET: local seek to 31743800B (423.3s of 1327.9s)
+[1537.72] DEC: prefetch done, fill=65536 finished=0
+[1538.23] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1538.29] DEC: MVD OK 336x240
+[1538.32] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1538.34] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1538.36] AUDIO: found decoder 'aac'
+[1538.38] AUDIO: decoder opened (swr deferred to first frame)
+[1538.40] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1538.42] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1538.52] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1538.57] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1538.59] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1538.61] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1538.72] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1538.74] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1538.75] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1538.77] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1538.78] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1538.90] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1538.91] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1538.92] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1538.94] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1539.06] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1539.08] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1539.10] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1539.11] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1539.24] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1539.25] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1539.27] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1539.28] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1539.41] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1539.43] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1539.44] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1539.45] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1539.58] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1539.60] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1539.61] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1539.62] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1539.74] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1539.76] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1539.78] MVD: ProcessNAL ret=0x00017003 nal_size=2023 frame#32400
+[1539.80] MVD: RenderFrame ret=0x00017000
+[1544.04] MVD: ProcessNAL ret=0x00017003 nal_size=3214 frame#32500
+[1544.06] MVD: RenderFrame ret=0x00017000
+[1548.16] MVD: ProcessNAL ret=0x00017003 nal_size=831 frame#32600
+[1548.18] MVD: RenderFrame ret=0x00017000
+[1552.30] MVD: ProcessNAL ret=0x00017003 nal_size=2638 frame#32700
+[1552.32] MVD: RenderFrame ret=0x00017000
+[1556.56] MVD: ProcessNAL ret=0x00017003 nal_size=1686 frame#32800
+[1556.58] MVD: RenderFrame ret=0x00017000
+[1560.67] MVD: ProcessNAL ret=0x00017003 nal_size=3143 frame#32900
+[1560.69] MVD: RenderFrame ret=0x00017000
+[1564.92] MVD: ProcessNAL ret=0x00017003 nal_size=2826 frame#33000
+[1564.94] MVD: RenderFrame ret=0x00017000
+[1569.03] MVD: ProcessNAL ret=0x00017003 nal_size=3140 frame#33100
+[1569.05] MVD: RenderFrame ret=0x00017000
+[1573.15] MVD: ProcessNAL ret=0x00017003 nal_size=3049 frame#33200
+[1573.17] MVD: RenderFrame ret=0x00017000
+[1577.42] MVD: ProcessNAL ret=0x00017003 nal_size=4129 frame#33300
+[1577.43] MVD: RenderFrame ret=0x00017000
+[1581.53] MVD: ProcessNAL ret=0x00017003 nal_size=5417 frame#33400
+[1581.55] MVD: RenderFrame ret=0x00017000
+[1585.77] MVD: ProcessNAL ret=0x00017003 nal_size=2113 frame#33500
+[1585.79] MVD: RenderFrame ret=0x00017000
+[1589.93] MVD: ProcessNAL ret=0x00017003 nal_size=1323 frame#33600
+[1589.94] MVD: RenderFrame ret=0x00017000
+[1594.06] MVD: ProcessNAL ret=0x00017003 nal_size=3367 frame#33700
+[1594.08] MVD: RenderFrame ret=0x00017000
+[1598.32] MVD: ProcessNAL ret=0x00017003 nal_size=765 frame#33800
+[1598.34] MVD: RenderFrame ret=0x00017000
+[1602.41] MVD: ProcessNAL ret=0x00017003 nal_size=826 frame#33900
+[1602.43] MVD: RenderFrame ret=0x00017000
+[1606.72] MVD: ProcessNAL ret=0x00017003 nal_size=1159 frame#34000
+[1606.78] MVD: RenderFrame ret=0x00017000
+[1610.87] MVD: ProcessNAL ret=0x00017003 nal_size=151 frame#34100
+[1610.92] MVD: RenderFrame ret=0x00017000
+[1615.05] MVD: ProcessNAL ret=0x00017003 nal_size=1219 frame#34200
+[1615.10] MVD: RenderFrame ret=0x00017000
+[1619.35] MVD: ProcessNAL ret=0x00017003 nal_size=3907 frame#34300
+[1619.40] MVD: RenderFrame ret=0x00017000
+[1623.55] MVD: ProcessNAL ret=0x00017003 nal_size=1429 frame#34400
+[1623.60] MVD: RenderFrame ret=0x00017000
+[1627.89] MVD: ProcessNAL ret=0x00017003 nal_size=5535 frame#34500
+[1627.94] MVD: RenderFrame ret=0x00017000
+[1632.01] MVD: ProcessNAL ret=0x00017003 nal_size=2920 frame#34600
+[1632.03] MVD: RenderFrame ret=0x00017000
+[1636.12] MVD: ProcessNAL ret=0x00017003 nal_size=1266 frame#34700
+[1636.14] MVD: RenderFrame ret=0x00017000
+[1640.39] MVD: ProcessNAL ret=0x00017003 nal_size=3067 frame#34800
+[1640.41] MVD: RenderFrame ret=0x00017000
+[1644.53] MVD: ProcessNAL ret=0x00017003 nal_size=1215 frame#34900
+[1644.55] MVD: RenderFrame ret=0x00017000
+[1648.65] MVD: ProcessNAL ret=0x00017003 nal_size=3708 frame#35000
+[1648.67] MVD: RenderFrame ret=0x00017000
+[1648.81] NET: local file done
+[1648.85] CONV: thread exiting
+[1648.87] PLAY: starting video, url_len=64 seek=9583001664 3d=0
+[1648.88] PLAY: creating threads, prio=48
+[1648.89] NET: thread started
+[1648.90] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1648.92] DEC: thread started, waiting for prefetch (32768 bytes)
+[1648.94] CONV: thread started
+[1648.95] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1648.96] NET: local seek to 71872400B (958.3s of 1327.9s)
+[1649.00] DEC: prefetch done, fill=65536 finished=0
+[1649.52] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1649.58] DEC: MVD OK 336x240
+[1649.59] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1649.62] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1649.64] AUDIO: found decoder 'aac'
+[1649.66] AUDIO: decoder opened (swr deferred to first frame)
+[1649.67] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1649.69] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1649.71] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1649.75] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1649.78] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1649.89] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1649.91] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1649.92] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1649.94] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.06] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.08] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.09] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.10] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.23] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.25] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.26] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.27] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.40] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.42] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.44] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.45] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.57] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.59] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.60] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.61] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.74] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.76] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.77] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.78] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.91] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.93] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.94] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1650.95] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1651.09] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1651.11] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1651.12] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1651.13] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1651.26] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1651.28] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1653.67] MVD: ProcessNAL ret=0x00017003 nal_size=4097 frame#35100
+[1653.69] MVD: RenderFrame ret=0x00017000
+[1656.36] CONV: thread exiting
+[1656.37] NET: local file done
+[1656.39] PLAY: starting video, url_len=64 seek=13750450000 3d=0
+[1656.40] PLAY: creating threads, prio=48
+[1656.42] NET: thread started
+[1656.43] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1656.44] DEC: thread started, waiting for prefetch (32768 bytes)
+[1656.46] CONV: thread started
+[1656.47] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1656.51] DEC: prefetch done, fill=65536 finished=0
+[1657.04] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1657.14] DEC: MVD OK 336x240
+[1657.21] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1657.26] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1657.31] AUDIO: found decoder 'aac'
+[1657.37] AUDIO: decoder opened (swr deferred to first frame)
+[1657.43] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1657.49] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1659.14] MVD: ProcessNAL ret=0x00017003 nal_size=3103 frame#35200
+[1659.18] MVD: RenderFrame ret=0x00017000
+[1659.30] NET: local file done
+[1659.32] CONV: thread exiting
+[1659.33] PLAY: starting video, url_len=64 seek=13481560000 3d=0
+[1659.35] PLAY: creating threads, prio=48
+[1659.36] NET: thread started
+[1659.37] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1659.38] DEC: thread started, waiting for prefetch (32768 bytes)
+[1659.40] CONV: thread started
+[1659.42] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1659.45] DEC: prefetch done, fill=65536 finished=0
+[1659.94] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1660.00] DEC: MVD OK 336x240
+[1660.02] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1660.05] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1660.07] AUDIO: found decoder 'aac'
+[1660.11] AUDIO: decoder opened (swr deferred to first frame)
+[1660.14] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1660.17] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1661.12] NET: local file done
+[1661.16] CONV: thread exiting
+[1661.18] PLAY: starting video, url_len=64 seek=13805996666 3d=0
+[1661.19] PLAY: creating threads, prio=48
+[1661.20] NET: thread started
+[1661.22] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1661.23] DEC: thread started, waiting for prefetch (32768 bytes)
+[1661.25] CONV: thread started
+[1661.26] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1661.30] DEC: prefetch done, fill=65536 finished=0
+[1661.79] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1661.85] DEC: MVD OK 336x240
+[1661.87] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1661.90] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1661.93] AUDIO: found decoder 'aac'
+[1661.96] AUDIO: decoder opened (swr deferred to first frame)
+[1661.99] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1662.02] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1662.68] NET: local file done
+[1662.69] CONV: thread exiting
+[1662.71] PLAY: starting video, url_len=64 seek=13750450000 3d=0
+[1662.72] PLAY: creating threads, prio=48
+[1662.73] NET: thread started
+[1662.74] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1662.75] DEC: thread started, waiting for prefetch (32768 bytes)
+[1662.77] CONV: thread started
+[1662.79] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1662.82] DEC: prefetch done, fill=65536 finished=0
+[1663.15] CONV: thread exiting
+[1663.28] NET: local file done
+[1663.30] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1663.33] DEC: MVD OK 336x240
+[1663.35] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1663.36] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1663.37] AUDIO: found decoder 'aac'
+[1663.39] AUDIO: decoder opened (swr deferred to first frame)
+[1663.40] PLAY: starting video, url_len=64 seek=13750450000 3d=0
+[1663.41] PLAY: creating threads, prio=48
+[1663.43] NET: thread started
+[1663.44] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1663.45] DEC: thread started, waiting for prefetch (32768 bytes)
+[1663.47] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1663.49] CONV: thread started
+[1663.51] DEC: prefetch done, fill=65536 finished=0
+[1663.69] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1663.70] NET: local file done
+[1663.73] CONV: thread exiting
+[1663.74] DEC: MVD OK 336x240
+[1663.76] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1663.77] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1663.78] AUDIO: found decoder 'aac'
+[1663.80] AUDIO: decoder opened (swr deferred to first frame)
+[1663.82] PLAY: starting video, url_len=64 seek=13750450000 3d=0
+[1663.83] PLAY: creating threads, prio=48
+[1663.84] NET: thread started
+[1663.85] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1663.86] DEC: thread started, waiting for prefetch (32768 bytes)
+[1663.88] CONV: thread started
+[1663.90] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1663.94] DEC: prefetch done, fill=65536 finished=0
+[1664.43] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1664.49] DEC: MVD OK 336x240
+[1664.51] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1664.54] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1664.57] AUDIO: found decoder 'aac'
+[1664.62] AUDIO: decoder opened (swr deferred to first frame)
+[1664.64] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1664.67] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1666.96] MVD: ProcessNAL ret=0x00017003 nal_size=916 frame#35300
+[1666.98] MVD: RenderFrame ret=0x00017000
+[1671.21] MVD: ProcessNAL ret=0x00017003 nal_size=3413 frame#35400
+[1671.23] MVD: RenderFrame ret=0x00017000
+[1675.33] MVD: ProcessNAL ret=0x00017003 nal_size=2428 frame#35500
+[1675.35] MVD: RenderFrame ret=0x00017000
+[1679.63] MVD: ProcessNAL ret=0x00017003 nal_size=1842 frame#35600
+[1679.69] MVD: RenderFrame ret=0x00017000
+[1683.83] MVD: ProcessNAL ret=0x00017003 nal_size=2555 frame#35700
+[1683.91] MVD: RenderFrame ret=0x00017000
+[1688.01] MVD: ProcessNAL ret=0x00017003 nal_size=331 frame#35800
+[1688.06] MVD: RenderFrame ret=0x00017000
+[1692.36] MVD: ProcessNAL ret=0x00017003 nal_size=3521 frame#35900
+[1692.41] MVD: RenderFrame ret=0x00017000
+[1696.54] MVD: ProcessNAL ret=0x00017003 nal_size=3354 frame#36000
+[1696.58] MVD: RenderFrame ret=0x00017000
+[1700.71] MVD: ProcessNAL ret=0x00017003 nal_size=1336 frame#36100
+[1700.76] MVD: RenderFrame ret=0x00017000
+[1705.00] MVD: ProcessNAL ret=0x00017003 nal_size=10850 frame#36200
+[1705.02] MVD: RenderFrame ret=0x00017000
+[1709.13] MVD: ProcessNAL ret=0x00017003 nal_size=4452 frame#36300
+[1709.14] MVD: RenderFrame ret=0x00017000
+[1713.36] MVD: ProcessNAL ret=0x00017003 nal_size=467 frame#36400
+[1713.38] MVD: RenderFrame ret=0x00017000
+[1717.48] MVD: ProcessNAL ret=0x00017003 nal_size=2371 frame#36500
+[1717.49] MVD: RenderFrame ret=0x00017000
+[1721.72] MVD: ProcessNAL ret=0x00017003 nal_size=4583 frame#36600
+[1721.74] MVD: RenderFrame ret=0x00017000
+[1725.89] MVD: ProcessNAL ret=0x00017003 nal_size=3679 frame#36700
+[1725.91] MVD: RenderFrame ret=0x00017000
+[1730.02] MVD: ProcessNAL ret=0x00017003 nal_size=2101 frame#36800
+[1730.04] MVD: RenderFrame ret=0x00017000
+[1734.25] MVD: ProcessNAL ret=0x00017003 nal_size=2217 frame#36900
+[1734.27] MVD: RenderFrame ret=0x00017000
+[1738.37] MVD: ProcessNAL ret=0x00017003 nal_size=5049 frame#37000
+[1738.39] MVD: RenderFrame ret=0x00017000
+[1742.61] MVD: ProcessNAL ret=0x00017003 nal_size=3010 frame#37100
+[1742.64] MVD: RenderFrame ret=0x00017000
+[1746.74] MVD: ProcessNAL ret=0x00017003 nal_size=1029 frame#37200
+[1746.75] MVD: RenderFrame ret=0x00017000
+[1750.85] MVD: ProcessNAL ret=0x00017003 nal_size=419 frame#37300
+[1750.86] MVD: RenderFrame ret=0x00017000
+[1755.10] MVD: ProcessNAL ret=0x00017003 nal_size=108 frame#37400
+[1755.12] MVD: RenderFrame ret=0x00017000
+[1759.23] MVD: ProcessNAL ret=0x00017003 nal_size=1029 frame#37500
+[1759.25] MVD: RenderFrame ret=0x00017000
+[1763.47] MVD: ProcessNAL ret=0x00017003 nal_size=498 frame#37600
+[1763.50] MVD: RenderFrame ret=0x00017000
+[1763.79] CONV: thread exiting
+[1763.81] NET: local file done
+[1763.82] PLAY: starting video, url_len=64 seek=13750450000 3d=0
+[1763.83] PLAY: creating threads, prio=48
+[1763.84] NET: thread started
+[1763.86] NET: local file sdmc:/3ds/jellyfin-3ds/video_bf35148d606571356cfd32e01aeeaa59.ts
+[1763.87] DEC: thread started, waiting for prefetch (32768 bytes)
+[1763.89] CONV: thread started
+[1763.90] NET: estimated duration 1327.9s from file_size=99590744 bps=600000
+[1763.94] DEC: prefetch done, fill=65536 finished=0
+[1764.43] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1764.49] DEC: MVD OK 336x240
+[1764.51] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1764.54] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1764.56] AUDIO: found decoder 'aac'
+[1764.60] AUDIO: decoder opened (swr deferred to first frame)
+[1764.62] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1764.66] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1768.48] MVD: ProcessNAL ret=0x00017003 nal_size=4414 frame#37700
+[1768.50] MVD: RenderFrame ret=0x00017000
+[1772.73] MVD: ProcessNAL ret=0x00017003 nal_size=3007 frame#37800
+[1772.74] MVD: RenderFrame ret=0x00017000
+[1776.85] MVD: ProcessNAL ret=0x00017003 nal_size=3236 frame#37900
+[1776.86] MVD: RenderFrame ret=0x00017000
+[1780.14] CBZ: cd_off=1013126 cd_count=7
+[1780.18] CBZ: opened with 6 pages
+[1780.20] CBZ: opened local sdmc:/3ds/jellyfin-3ds/cbz_65276c46ea9bae0240fc5ef5cbb82850.cbz — 6 pages
+[1780.97] MVD: ProcessNAL ret=0x00017003 nal_size=2567 frame#38000
+[1780.99] MVD: RenderFrame ret=0x00017000
+[1781.93] CBZ: page 0 loaded (orig 728x1070 → tex 696x1024)
+[1784.24] PLAY: starting video, url_len=64 seek=0 3d=0
+[1784.26] NET: local file done
+[1784.27] CONV: thread exiting
+[1784.28] PLAY: creating threads, prio=48
+[1784.29] NET: thread started
+[1784.31] NET: local file sdmc:/3ds/jellyfin-3ds/video_2bc82bd4d37cf930524fbf28b14b20f3.ts
+[1784.32] DEC: thread started, waiting for prefetch (32768 bytes)
+[1784.34] NET: estimated duration 1411.8s from file_size=105882916 bps=600000
+[1784.35] CONV: thread started
+[1784.38] DEC: prefetch done, fill=65536 finished=0
+[1784.86] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1784.92] DEC: MVD OK 336x240
+[1784.93] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1784.96] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1784.99] AUDIO: found decoder 'aac'
+[1785.03] AUDIO: decoder opened (swr deferred to first frame)
+[1785.06] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1785.09] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1785.77] NET: local file done
+[1785.86] CONV: thread exiting
+[1785.92] PLAY: starting video, url_len=64 seek=320672888 3d=0
+[1785.97] PLAY: creating threads, prio=48
+[1786.01] NET: thread started
+[1786.06] NET: local file sdmc:/3ds/jellyfin-3ds/video_2bc82bd4d37cf930524fbf28b14b20f3.ts
+[1786.10] DEC: thread started, waiting for prefetch (32768 bytes)
+[1786.14] CONV: thread started
+[1786.19] NET: estimated duration 1411.8s from file_size=105882916 bps=600000
+[1786.26] NET: local seek to 2404896B (32.1s of 1411.8s)
+[1786.33] DEC: prefetch done, fill=65536 finished=0
+[1786.95] DEC: demux OK video=324x240 vidx=0 aidx=1
+[1787.01] DEC: MVD OK 336x240
+[1787.04] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[1787.05] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[1787.08] AUDIO: found decoder 'aac'
+[1787.10] AUDIO: decoder opened (swr deferred to first frame)
+[1787.13] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1787.17] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[1787.20] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[1787.29] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1787.32] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1787.33] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1787.34] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1787.46] MVD: ProcessNAL ret=0xD96170CA nal_size=2948 frame#38100
+[1787.48] MVD: ProcessNAL FAILED ret=0xD96170CA
+[1791.59] MVD: ProcessNAL ret=0x00017003 nal_size=2982 frame#38200
+[1791.61] MVD: RenderFrame ret=0x00017000
+[1795.72] MVD: ProcessNAL ret=0x00017003 nal_size=3997 frame#38300
+[1795.75] MVD: RenderFrame ret=0x00017000
+[1799.96] MVD: ProcessNAL ret=0x00017003 nal_size=2969 frame#38400
+[1799.98] MVD: RenderFrame ret=0x00017000
+[1804.09] MVD: ProcessNAL ret=0x00017003 nal_size=694 frame#38500
+[1804.11] MVD: RenderFrame ret=0x00017000
+[1808.20] MVD: ProcessNAL ret=0x00017003 nal_size=1194 frame#38600
+[1808.21] MVD: RenderFrame ret=0x00017000
+[1812.46] MVD: ProcessNAL ret=0x00017003 nal_size=2372 frame#38700
+[1812.48] MVD: RenderFrame ret=0x00017000
+[1816.58] MVD: ProcessNAL ret=0x00017003 nal_size=1106 frame#38800
+[1816.59] MVD: RenderFrame ret=0x00017000
+[1820.83] MVD: ProcessNAL ret=0x00017003 nal_size=4380 frame#38900
+[1820.85] MVD: RenderFrame ret=0x00017000
+[1824.94] MVD: ProcessNAL ret=0x00017003 nal_size=1725 frame#39000
+[1824.96] MVD: RenderFrame ret=0x00017000
+[1829.19] MVD: ProcessNAL ret=0x00017003 nal_size=55 frame#39100
+[1829.21] MVD: RenderFrame ret=0x00017000
+[1833.28] MVD: ProcessNAL ret=0x00017003 nal_size=570 frame#39200
+[1833.30] MVD: RenderFrame ret=0x00017000
+[1837.52] MVD: ProcessNAL ret=0x00017003 nal_size=1970 frame#39300
+[1837.54] MVD: RenderFrame ret=0x00017000
+[1841.67] MVD: ProcessNAL ret=0x00017003 nal_size=2825 frame#39400
+[1841.69] MVD: RenderFrame ret=0x00017000
+[1845.78] MVD: ProcessNAL ret=0x00017003 nal_size=1464 frame#39500
+[1845.80] MVD: RenderFrame ret=0x00017000
+[1850.03] MVD: ProcessNAL ret=0x00017003 nal_size=2409 frame#39600
+[1850.05] MVD: RenderFrame ret=0x00017000
+[1854.21] MVD: ProcessNAL ret=0x00017003 nal_size=1359 frame#39700
+[1854.23] MVD: RenderFrame ret=0x00017000
+[1858.35] MVD: ProcessNAL ret=0x00017003 nal_size=2851 frame#39800
+[1858.37] MVD: RenderFrame ret=0x00017000
+[1862.59] MVD: ProcessNAL ret=0x00017003 nal_size=2784 frame#39900
+[1862.61] MVD: RenderFrame ret=0x00017000
+[1866.69] MVD: ProcessNAL ret=0x00017003 nal_size=3427 frame#40000
+[1866.71] MVD: RenderFrame ret=0x00017000
+[1870.85] MVD: ProcessNAL ret=0x00017003 nal_size=3471 frame#40100
+[1870.87] MVD: RenderFrame ret=0x00017000
+[1875.10] MVD: ProcessNAL ret=0x00017003 nal_size=2607 frame#40200
+[1875.11] MVD: RenderFrame ret=0x00017000
+[1879.20] MVD: ProcessNAL ret=0x00017003 nal_size=623 frame#40300
+[1879.22] MVD: RenderFrame ret=0x00017000
+[1883.30] MVD: ProcessNAL ret=0x00017003 nal_size=1763 frame#40400
+[1883.32] MVD: RenderFrame ret=0x00017000
+[1887.59] MVD: ProcessNAL ret=0x00017003 nal_size=2057 frame#40500
+[1887.60] MVD: RenderFrame ret=0x00017000
+[1891.71] MVD: ProcessNAL ret=0x00017003 nal_size=268 frame#40600
+[1891.73] MVD: RenderFrame ret=0x00017000
+[1895.84] MVD: ProcessNAL ret=0x00017003 nal_size=74 frame#40700
+[1895.86] MVD: RenderFrame ret=0x00017000
+[1900.09] MVD: ProcessNAL ret=0x00017003 nal_size=4151 frame#40800
+[1900.11] MVD: RenderFrame ret=0x00017000
+[1904.20] MVD: ProcessNAL ret=0x00017003 nal_size=1418 frame#40900
+[1904.22] MVD: RenderFrame ret=0x00017000
+[1908.45] MVD: ProcessNAL ret=0x00017003 nal_size=1870 frame#41000
+[1908.47] MVD: RenderFrame ret=0x00017000
+[1912.56] MVD: ProcessNAL ret=0x00017003 nal_size=2151 frame#41100
+[1912.58] MVD: RenderFrame ret=0x00017000
+[1916.70] MVD: ProcessNAL ret=0x00017003 nal_size=3513 frame#41200
+[1916.72] MVD: RenderFrame ret=0x00017000
+[1920.97] MVD: ProcessNAL ret=0x00017003 nal_size=2464 frame#41300
+[1920.99] MVD: RenderFrame ret=0x00017000
+[1925.07] MVD: ProcessNAL ret=0x00017003 nal_size=3141 frame#41400
+[1925.09] MVD: RenderFrame ret=0x00017000
+[1929.26] MVD: ProcessNAL ret=0x00017003 nal_size=5505 frame#41500
+[1929.28] MVD: RenderFrame ret=0x00017000
+[1933.47] MVD: ProcessNAL ret=0x00017003 nal_size=1915 frame#41600
+[1933.49] MVD: RenderFrame ret=0x00017000
+[1937.62] MVD: ProcessNAL ret=0x00017003 nal_size=649 frame#41700
+[1937.64] MVD: RenderFrame ret=0x00017000
+[1941.77] MVD: ProcessNAL ret=0x00017003 nal_size=1594 frame#41800
+[1941.79] MVD: RenderFrame ret=0x00017000
+[1945.93] MVD: ProcessNAL ret=0x00017003 nal_size=1697 frame#41900
+[1945.95] MVD: RenderFrame ret=0x00017000
+[1950.20] MVD: ProcessNAL ret=0x00017003 nal_size=3684 frame#42000
+[1950.27] MVD: RenderFrame ret=0x00017000
+[1954.41] MVD: ProcessNAL ret=0x00017003 nal_size=3296 frame#42100
+[1954.48] MVD: RenderFrame ret=0x00017000
+[1958.61] MVD: ProcessNAL ret=0x00017003 nal_size=96 frame#42200
+[1958.65] MVD: RenderFrame ret=0x00017000
+[1962.94] MVD: ProcessNAL ret=0x00017003 nal_size=2076 frame#42300
+[1962.99] MVD: RenderFrame ret=0x00017000
+[1967.14] MVD: ProcessNAL ret=0x00017003 nal_size=670 frame#42400
+[1967.19] MVD: RenderFrame ret=0x00017000
+[1971.31] MVD: ProcessNAL ret=0x00017003 nal_size=547 frame#42500
+[1971.38] MVD: RenderFrame ret=0x00017000
+[1975.67] MVD: ProcessNAL ret=0x00017003 nal_size=524 frame#42600
+[1975.70] MVD: RenderFrame ret=0x00017000
+[1979.83] MVD: ProcessNAL ret=0x00017003 nal_size=657 frame#42700
+[1979.85] MVD: RenderFrame ret=0x00017000
+[1983.94] MVD: ProcessNAL ret=0x00017003 nal_size=1748 frame#42800
+[1983.95] MVD: RenderFrame ret=0x00017000
+[1988.18] MVD: ProcessNAL ret=0x00017003 nal_size=2050 frame#42900
+[1988.20] MVD: RenderFrame ret=0x00017000
+[1992.31] MVD: ProcessNAL ret=0x00017003 nal_size=1590 frame#43000
+[1992.33] MVD: RenderFrame ret=0x00017000
+[1996.44] MVD: ProcessNAL ret=0x00017003 nal_size=2068 frame#43100
+[1996.46] MVD: RenderFrame ret=0x00017000
+[2000.72] MVD: ProcessNAL ret=0x00017003 nal_size=113 frame#43200
+[2000.73] MVD: RenderFrame ret=0x00017000
+[2004.84] MVD: ProcessNAL ret=0x00017003 nal_size=3733 frame#43300
+[2004.86] MVD: RenderFrame ret=0x00017000
+[2008.97] MVD: ProcessNAL ret=0x00017003 nal_size=719 frame#43400
+[2008.99] MVD: RenderFrame ret=0x00017000
+[2013.23] MVD: ProcessNAL ret=0x00017003 nal_size=2612 frame#43500
+[2013.24] MVD: RenderFrame ret=0x00017000
+[2017.34] MVD: ProcessNAL ret=0x00017003 nal_size=1894 frame#43600
+[2017.36] MVD: RenderFrame ret=0x00017000
+[2021.59] MVD: ProcessNAL ret=0x00017003 nal_size=1693 frame#43700
+[2021.60] MVD: RenderFrame ret=0x00017000
+[2025.72] MVD: ProcessNAL ret=0x00017003 nal_size=2212 frame#43800
+[2025.73] MVD: RenderFrame ret=0x00017000
+[2029.81] MVD: ProcessNAL ret=0x00017003 nal_size=49 frame#43900
+[2029.84] MVD: RenderFrame ret=0x00017000
+[2034.12] MVD: ProcessNAL ret=0x00017003 nal_size=20101 frame#44000
+[2034.14] MVD: RenderFrame ret=0x00017000
+[2038.25] MVD: ProcessNAL ret=0x00017003 nal_size=105 frame#44100
+[2038.27] MVD: RenderFrame ret=0x00017000
+[2042.37] MVD: ProcessNAL ret=0x00017003 nal_size=148 frame#44200
+[2042.39] MVD: RenderFrame ret=0x00017000
+[2046.63] MVD: ProcessNAL ret=0x00017003 nal_size=4278 frame#44300
+[2046.65] MVD: RenderFrame ret=0x00017000
+[2050.71] MVD: ProcessNAL ret=0x00017003 nal_size=3419 frame#44400
+[2050.73] MVD: RenderFrame ret=0x00017000
+[2054.94] MVD: ProcessNAL ret=0x00017003 nal_size=454 frame#44500
+[2054.96] MVD: RenderFrame ret=0x00017000
+[2059.09] MVD: ProcessNAL ret=0x00017003 nal_size=375 frame#44600
+[2059.11] MVD: RenderFrame ret=0x00017000
+[2063.18] MVD: ProcessNAL ret=0x00017003 nal_size=162 frame#44700
+[2063.20] MVD: RenderFrame ret=0x00017000
+[2067.42] MVD: ProcessNAL ret=0x00017003 nal_size=2156 frame#44800
+[2067.44] MVD: RenderFrame ret=0x00017000
+[2071.65] MVD: ProcessNAL ret=0x00017003 nal_size=80 frame#44900
+[2071.67] MVD: RenderFrame ret=0x00017000
+[2075.78] MVD: ProcessNAL ret=0x00017003 nal_size=4228 frame#45000
+[2075.80] MVD: RenderFrame ret=0x00017000
+[2079.89] MVD: ProcessNAL ret=0x00017003 nal_size=3118 frame#45100
+[2079.91] MVD: RenderFrame ret=0x00017000
+[2084.12] MVD: ProcessNAL ret=0x00017003 nal_size=1560 frame#45200
+[2084.14] MVD: RenderFrame ret=0x00017000
+[2088.24] MVD: ProcessNAL ret=0x00017003 nal_size=1014 frame#45300
+[2088.26] MVD: RenderFrame ret=0x00017000
+[2092.49] MVD: ProcessNAL ret=0x00017003 nal_size=71 frame#45400
+[2092.51] MVD: RenderFrame ret=0x00017000
+[2096.62] MVD: ProcessNAL ret=0x00017003 nal_size=133 frame#45500
+[2096.63] MVD: RenderFrame ret=0x00017000
+[2100.85] MVD: ProcessNAL ret=0x00017003 nal_size=379 frame#45600
+[2100.86] MVD: RenderFrame ret=0x00017000
+[2104.98] MVD: ProcessNAL ret=0x00017003 nal_size=739 frame#45700
+[2105.00] MVD: RenderFrame ret=0x00017000
+[2109.11] MVD: ProcessNAL ret=0x00017003 nal_size=2195 frame#45800
+[2109.13] MVD: RenderFrame ret=0x00017000
+[2113.38] MVD: ProcessNAL ret=0x00017003 nal_size=376 frame#45900
+[2113.40] MVD: RenderFrame ret=0x00017000
+[2114.90] NAV: into 'Books' id=4e985111ed7f570b595204d82adb02f3 depth=1 items=5
+[2117.51] MVD: ProcessNAL ret=0x00017003 nal_size=2108 frame#46000
+[2117.53] MVD: RenderFrame ret=0x00017000
+[2121.63] MVD: ProcessNAL ret=0x00017003 nal_size=99 frame#46100
+[2121.65] MVD: RenderFrame ret=0x00017000
+[2121.76] CBZ: downloading http://192.168.12.186:8096/Items/d645e2f56bc5d88f1ecceb82b563dd8e/Download
+[2124.42] CBZ: download curl=0 http=200 bytes=341770
+[2124.49] CBZ: cd_off=339343 cd_count=37
+[2124.71] CBZ: opened with 1 pages
+[2124.75] CBZ: ready — 1 pages
+[2125.09] CBZ: page 0 loaded (orig 315x508 → tex 315x508)
+[2125.93] MVD: ProcessNAL ret=0x00017003 nal_size=226 frame#46200
+[2125.95] MVD: RenderFrame ret=0x00017000
+[2130.07] MVD: ProcessNAL ret=0x00017003 nal_size=2445 frame#46300
+[2130.09] MVD: RenderFrame ret=0x00017000
+[2134.24] MVD: ProcessNAL ret=0x00017003 nal_size=136 frame#46400
+[2134.26] MVD: RenderFrame ret=0x00017000
+[2138.35] MVD: ProcessNAL ret=0x00017003 nal_size=2058 frame#46500
+[2138.37] MVD: RenderFrame ret=0x00017000
+[2142.61] MVD: ProcessNAL ret=0x00017003 nal_size=2806 frame#46600
+[2142.62] MVD: RenderFrame ret=0x00017000
+[2146.71] MVD: ProcessNAL ret=0x00017003 nal_size=13214 frame#46700
+[2146.73] MVD: RenderFrame ret=0x00017000
+[2150.85] MVD: ProcessNAL ret=0x00017003 nal_size=125 frame#46800
+[2150.88] MVD: RenderFrame ret=0x00017000
+[2155.11] MVD: ProcessNAL ret=0x00017003 nal_size=4420 frame#46900
+[2155.13] MVD: RenderFrame ret=0x00017000
+[2159.22] MVD: ProcessNAL ret=0x00017003 nal_size=1998 frame#47000
+[2159.24] MVD: RenderFrame ret=0x00017000
+[2163.49] MVD: ProcessNAL ret=0x00017003 nal_size=1893 frame#47100
+[2163.51] MVD: RenderFrame ret=0x00017000
+[2167.62] MVD: ProcessNAL ret=0x00017003 nal_size=2844 frame#47200
+[2167.64] MVD: RenderFrame ret=0x00017000
+[2171.72] MVD: ProcessNAL ret=0x00017003 nal_size=91 frame#47300
+[2171.74] MVD: RenderFrame ret=0x00017000
+[2175.99] MVD: ProcessNAL ret=0x00017003 nal_size=1157 frame#47400
+[2176.01] MVD: RenderFrame ret=0x00017000
+[2180.08] MVD: ProcessNAL ret=0x00017003 nal_size=4746 frame#47500
+[2180.09] MVD: RenderFrame ret=0x00017000
+[2184.32] MVD: ProcessNAL ret=0x00017003 nal_size=858 frame#47600
+[2184.34] MVD: RenderFrame ret=0x00017000
+[2188.45] MVD: ProcessNAL ret=0x00017003 nal_size=3461 frame#47700
+[2188.47] MVD: RenderFrame ret=0x00017000
+[2192.59] MVD: ProcessNAL ret=0x00017003 nal_size=659 frame#47800
+[2192.61] MVD: RenderFrame ret=0x00017000
+[2196.76] MVD: ProcessNAL ret=0x00017003 nal_size=3789 frame#47900
+[2196.78] MVD: RenderFrame ret=0x00017000
+[2201.02] MVD: ProcessNAL ret=0x00017003 nal_size=445 frame#48000
+[2201.04] MVD: RenderFrame ret=0x00017000
+[2205.13] MVD: ProcessNAL ret=0x00017003 nal_size=3865 frame#48100
+[2205.15] MVD: RenderFrame ret=0x00017000
+[2209.34] MVD: ProcessNAL ret=0x00017003 nal_size=3769 frame#48200
+[2209.36] MVD: RenderFrame ret=0x00017000
+[2213.45] MVD: ProcessNAL ret=0x00017003 nal_size=91 frame#48300
+[2213.47] MVD: RenderFrame ret=0x00017000
+[2217.75] MVD: ProcessNAL ret=0x00017003 nal_size=1930 frame#48400
+[2217.77] MVD: RenderFrame ret=0x00017000
+[2221.92] MVD: ProcessNAL ret=0x00017003 nal_size=884 frame#48500
+[2221.93] MVD: RenderFrame ret=0x00017000
+[2229.06] NET: local file done
+[2229.09] CONV: thread exiting
+[2229.11] === log closed ===

@@ -1,0 +1,535 @@
+=== jellyfin-3ds debug log ===
+[   0.17] jellyfin-3ds v1.0.1-22-g5a654cb-dirty starting
+[   0.28] CACHE: indexed 66 cached item(s)
+[  20.36] PLAY: starting video, url_len=64 seek=0 3d=0
+[  20.45] SUB: local read 29990 bytes
+[  20.52] SUB: parsed 349 cues (PlayRes 976x720)
+[  20.57] PLAY: creating threads, prio=48
+[  20.58] NET: thread started
+[  20.59] NET: local file sdmc:/3ds/jellyfin-3ds/cache/22c544b43b19f04afde6b392f703df65.ts
+[  20.60] DEC: thread started, waiting for prefetch (32768 bytes)
+[  20.63] CONV: thread started
+[  20.64] NET: estimated duration 1391.3s from file_size=104349212 bps=600000
+[  20.68] DEC: prefetch done, fill=65536 finished=0
+[  21.03] DEC: demux OK video=324x240 vidx=0 aidx=1
+[  21.09] DEC: MVD OK 336x240
+[  21.11] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[  21.14] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[  21.18] AUDIO: found decoder 'aac'
+[  21.22] AUDIO: decoder opened (swr deferred to first frame)
+[  21.24] DEC: loop start
+[  21.28] DEC: first pkt ret=0 is_video=1 size=996
+[  21.31] DEC: first video pkt size=996 (skipped 0 pts=1.443s base=1.443s adj seek=0s)
+[  21.33] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[  21.34] MVD: ProcessNAL ret=0x00017004 nal_size=996 frame#1
+[  21.35] MVD: RenderFrame ret=0x00017000
+[  21.36] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[  21.45] MVD: ProcessNAL ret=0x00017003 nal_size=17 frame#2
+[  21.47] MVD: RenderFrame ret=0x00017000
+[  21.49] MVD: ProcessNAL ret=0x00017003 nal_size=17 frame#3
+[  21.50] MVD: RenderFrame ret=0x00017000
+[  21.51] RENDER: displaying tex[0] frame#1
+[  21.53] MVD: ProcessNAL ret=0x00017003 nal_size=17 frame#4
+[  21.54] RENDER: displaying tex[1] frame#2
+[  21.55] MVD: RenderFrame ret=0x00017000
+[  21.56] MVD: ProcessNAL ret=0x00017003 nal_size=17 frame#5
+[  21.58] RENDER: displaying tex[0] frame#3
+[  21.59] MVD: RenderFrame ret=0x00017000
+[  25.59] MVD: ProcessNAL ret=0x00017003 nal_size=3286 frame#100
+[  25.61] MVD: RenderFrame ret=0x00017000
+[  25.62] VDL: saved 22c544b43b19f04afde6b392f703df65.ass
+[  29.18] PLAY: starting video, url_len=64 seek=0 3d=0
+[  29.20] NET: local file done
+[  29.21] CONV: thread exiting
+[  29.22] PLAY: creating threads, prio=48
+[  29.24] NET: thread started
+[  29.25] NET: local file sdmc:/3ds/jellyfin-3ds/cache/50df4fcd7df7234fe1bd36d1d61666b4.ts
+[  29.26] DEC: thread started, waiting for prefetch (32768 bytes)
+[  29.29] CONV: thread started
+[  29.30] NET: estimated duration 1372.0s from file_size=102900108 bps=600000
+[  29.33] DEC: prefetch done, fill=65536 finished=0
+[  29.64] DEC: demux OK video=324x240 vidx=0 aidx=1
+[  29.70] DEC: MVD OK 336x240
+[  29.71] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[  29.74] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[  29.77] AUDIO: found decoder 'aac'
+[  29.81] AUDIO: decoder opened (swr deferred to first frame)
+[  29.84] DEC: loop start
+[  29.87] DEC: first pkt ret=0 is_video=1 size=996
+[  29.91] DEC: first video pkt size=996 (skipped 0 pts=1.443s base=1.443s adj seek=0s)
+[  29.93] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[  29.95] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[  30.39] MVD: ProcessNAL ret=0x00017003 nal_size=3879 frame#200
+[  30.41] MVD: RenderFrame ret=0x00017000
+[  34.25] VDL: saved 50df4fcd7df7234fe1bd36d1d61666b4.ass
+[  34.53] MVD: ProcessNAL ret=0x00017003 nal_size=1252 frame#300
+[  34.56] MVD: RenderFrame ret=0x00017000
+[  36.92] PLAY: starting video, url_len=64 seek=0 3d=0
+[  36.94] NET: local file done
+[  36.96] CONV: thread exiting
+[  37.02] SUB: local read 29990 bytes
+[  37.07] SUB: parsed 349 cues (PlayRes 976x720)
+[  37.09] PLAY: creating threads, prio=48
+[  37.10] NET: thread started
+[  37.11] NET: local file sdmc:/3ds/jellyfin-3ds/cache/22c544b43b19f04afde6b392f703df65.ts
+[  37.12] DEC: thread started, waiting for prefetch (32768 bytes)
+[  37.15] CONV: thread started
+[  37.16] NET: estimated duration 1391.3s from file_size=104349212 bps=600000
+[  37.20] DEC: prefetch done, fill=65536 finished=0
+[  37.51] DEC: demux OK video=324x240 vidx=0 aidx=1
+[  37.57] DEC: MVD OK 336x240
+[  37.58] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[  37.61] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[  37.64] AUDIO: found decoder 'aac'
+[  37.68] AUDIO: decoder opened (swr deferred to first frame)
+[  37.70] DEC: loop start
+[  37.74] DEC: first pkt ret=0 is_video=1 size=996
+[  37.77] DEC: first video pkt size=996 (skipped 0 pts=1.443s base=1.443s adj seek=0s)
+[  37.79] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[  37.80] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[  39.59] MVD: ProcessNAL ret=0x00017003 nal_size=3248 frame#400
+[  39.61] MVD: RenderFrame ret=0x00017000
+[  43.68] MVD: ProcessNAL ret=0x00017003 nal_size=2078 frame#500
+[  43.70] MVD: RenderFrame ret=0x00017000
+[  47.93] MVD: ProcessNAL ret=0x00017003 nal_size=1532 frame#600
+[  47.95] MVD: RenderFrame ret=0x00017000
+[  49.07] NET: local file done
+[  49.08] CONV: thread exiting
+[  49.09] PLAY: starting video, url_len=64 seek=412195445 3d=0
+[  49.10] PLAY: creating threads, prio=48
+[  49.12] NET: thread started
+[  49.13] NET: local file sdmc:/3ds/jellyfin-3ds/cache/22c544b43b19f04afde6b392f703df65.ts
+[  49.14] DEC: thread started, waiting for prefetch (32768 bytes)
+[  49.16] CONV: thread started
+[  49.22] NET: estimated duration 1391.3s from file_size=104349212 bps=600000
+[  49.31] NET: local seek 41.2s target=3091284B sps=2961221B
+[  49.40] DEC: prefetch done, fill=65536 finished=0
+[  49.70] DEC: dimensions 0x0 from probe — using cached 324x240
+[  49.75] DEC: demux OK video=324x240 vidx=0 aidx=1
+[  49.85] DEC: MVD OK 336x240
+[  49.90] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[  49.94] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[  49.99] AUDIO: found decoder 'aac'
+[  50.04] AUDIO: decoder opened (swr deferred to first frame)
+[  50.09] DEC: loop start
+[  50.13] DEC: first pkt ret=0 is_video=0 size=352
+[  50.18] DEC: pre-roll skip=1 ring_fill=262144
+[  50.19] DEC: first video pkt size=413 (skipped 8 pts=36.519s base=1.443s adj seek=41s)
+[  50.21] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[  50.25] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  50.27] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  50.30] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  50.33] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  50.36] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[  50.47] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  50.49] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  50.50] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  50.52] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  50.64] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  50.67] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  50.68] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  50.69] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  50.81] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  50.83] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  50.84] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  50.85] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  50.99] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.00] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.02] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.04] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.16] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.17] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.19] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.20] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.33] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.34] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.36] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.37] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.38] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.49] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.52] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.53] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.54] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.66] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.68] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.69] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.71] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.84] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.85] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.87] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  51.88] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.01] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.03] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.04] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.05] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.18] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.20] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.21] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.22] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.35] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.37] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.39] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.40] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.52] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.54] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.55] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.56] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.69] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.71] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.72] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.73] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  52.86] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  53.23] MVD: ProcessNAL ret=0x00017003 nal_size=4072 frame#700
+[  53.24] MVD: RenderFrame ret=0x00017000
+[  55.51] SUB: local read 29990 bytes
+[  55.56] SUB: parsed 349 cues (PlayRes 976x720)
+[  57.47] MVD: ProcessNAL ret=0x00017003 nal_size=950 frame#800
+[  57.49] MVD: RenderFrame ret=0x00017000
+[  61.58] MVD: ProcessNAL ret=0x00017003 nal_size=2617 frame#900
+[  61.60] MVD: RenderFrame ret=0x00017000
+[  62.84] NET: local file done
+[  62.87] CONV: thread exiting
+[  62.93] PLAY: starting video, url_len=64 seek=776726222 3d=0
+[  63.07] SUB: local read 29990 bytes
+[  63.15] SUB: parsed 349 cues (PlayRes 976x720)
+[  63.20] PLAY: creating threads, prio=48
+[  63.24] NET: thread started
+[  63.28] NET: local file sdmc:/3ds/jellyfin-3ds/cache/22c544b43b19f04afde6b392f703df65.ts
+[  63.32] DEC: thread started, waiting for prefetch (32768 bytes)
+[  63.39] NET: estimated duration 1391.3s from file_size=104349212 bps=600000
+[  63.43] CONV: thread started
+[  63.54] NET: local seek 77.7s target=5825368B sps=5687033B
+[  63.63] DEC: prefetch done, fill=65536 finished=0
+[  63.93] DEC: dimensions 0x0 from probe — using cached 324x240
+[  63.96] DEC: demux OK video=324x240 vidx=0 aidx=1
+[  64.01] DEC: MVD OK 336x240
+[  64.03] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[  64.04] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[  64.06] AUDIO: found decoder 'aac'
+[  64.08] AUDIO: decoder opened (swr deferred to first frame)
+[  64.09] DEC: loop start
+[  64.11] DEC: first pkt ret=0 is_video=0 size=311
+[  64.15] DEC: pre-roll skip=1 ring_fill=262144
+[  64.17] DEC: first video pkt size=1957 (skipped 8 pts=68.968s base=1.443s adj seek=77s)
+[  64.19] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[  64.20] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  64.23] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  64.26] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  64.29] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  64.30] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[  64.41] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  64.43] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  64.45] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  64.46] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  64.58] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  64.60] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  64.61] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  64.63] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  64.76] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  64.77] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  64.79] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  64.80] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  64.93] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  64.95] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  64.96] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  64.97] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.10] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.12] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.13] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.15] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.27] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.29] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.30] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.32] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.33] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.45] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.47] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.48] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.49] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.62] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.63] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.65] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.66] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.79] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.81] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.82] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.84] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.96] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.98] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  65.99] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  66.00] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  66.13] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  66.15] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  66.16] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  66.18] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  66.30] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  66.32] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  66.33] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  66.35] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  66.47] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  66.49] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  66.50] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  66.51] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  66.64] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  66.66] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  66.67] MVD: ProcessNAL FAILED ret=0xD96170CA
+[  67.16] MVD: ProcessNAL ret=0x00017003 nal_size=1435 frame#1000
+[  67.17] MVD: RenderFrame ret=0x00017000
+[  71.28] MVD: ProcessNAL ret=0x00017003 nal_size=1009 frame#1100
+[  71.38] MVD: RenderFrame ret=0x00017000
+[  75.51] MVD: ProcessNAL ret=0x00017003 nal_size=2048 frame#1200
+[  75.57] MVD: RenderFrame ret=0x00017000
+[  79.83] MVD: ProcessNAL ret=0x00017003 nal_size=3204 frame#1300
+[  79.88] MVD: RenderFrame ret=0x00017000
+[  83.99] MVD: ProcessNAL ret=0x00017003 nal_size=1188 frame#1400
+[  84.06] MVD: RenderFrame ret=0x00017000
+[  88.33] MVD: ProcessNAL ret=0x00017003 nal_size=2973 frame#1500
+[  88.38] MVD: RenderFrame ret=0x00017000
+[  92.49] MVD: ProcessNAL ret=0x00017003 nal_size=37 frame#1600
+[  92.53] MVD: RenderFrame ret=0x00017000
+[  96.65] MVD: ProcessNAL ret=0x00017003 nal_size=1883 frame#1700
+[  96.70] MVD: RenderFrame ret=0x00017000
+[ 100.92] MVD: ProcessNAL ret=0x00017003 nal_size=840 frame#1800
+[ 100.94] MVD: RenderFrame ret=0x00017000
+[ 105.06] MVD: ProcessNAL ret=0x00017003 nal_size=1789 frame#1900
+[ 105.08] MVD: RenderFrame ret=0x00017000
+[ 109.31] MVD: ProcessNAL ret=0x00017003 nal_size=2028 frame#2000
+[ 109.33] MVD: RenderFrame ret=0x00017000
+[ 113.44] MVD: ProcessNAL ret=0x00017003 nal_size=914 frame#2100
+[ 113.46] MVD: RenderFrame ret=0x00017000
+[ 117.53] MVD: ProcessNAL ret=0x00017003 nal_size=1482 frame#2200
+[ 117.55] MVD: RenderFrame ret=0x00017000
+[ 119.86] SUB: local read 29990 bytes
+[ 119.93] SUB: parsed 349 cues (PlayRes 976x720)
+[ 121.80] MVD: ProcessNAL ret=0x00017003 nal_size=516 frame#2300
+[ 121.82] MVD: RenderFrame ret=0x00017000
+[ 125.88] MVD: ProcessNAL ret=0x00017003 nal_size=1833 frame#2400
+[ 125.90] MVD: RenderFrame ret=0x00017000
+[ 130.15] MVD: ProcessNAL ret=0x00017003 nal_size=5643 frame#2500
+[ 130.17] MVD: RenderFrame ret=0x00017000
+[ 134.27] MVD: ProcessNAL ret=0x00017003 nal_size=26 frame#2600
+[ 134.29] MVD: RenderFrame ret=0x00017000
+[ 138.50] MVD: ProcessNAL ret=0x00017003 nal_size=6449 frame#2700
+[ 138.52] MVD: RenderFrame ret=0x00017000
+[ 142.61] MVD: ProcessNAL ret=0x00017003 nal_size=336 frame#2800
+[ 142.63] MVD: RenderFrame ret=0x00017000
+[ 146.73] MVD: ProcessNAL ret=0x00017003 nal_size=69 frame#2900
+[ 146.75] MVD: RenderFrame ret=0x00017000
+[ 151.02] MVD: ProcessNAL ret=0x00017003 nal_size=1002 frame#3000
+[ 151.03] MVD: RenderFrame ret=0x00017000
+[ 155.15] MVD: ProcessNAL ret=0x00017003 nal_size=3464 frame#3100
+[ 155.17] MVD: RenderFrame ret=0x00017000
+[ 159.40] MVD: ProcessNAL ret=0x00017003 nal_size=1427 frame#3200
+[ 159.43] MVD: RenderFrame ret=0x00017000
+[ 163.51] MVD: ProcessNAL ret=0x00017003 nal_size=2877 frame#3300
+[ 163.52] MVD: RenderFrame ret=0x00017000
+[ 165.66] VDL: downloading http://192.168.12.186:8096/Videos/179367f950d9fb9416150c24528e21dd/stream?UserId=41b9b982ca0c43648ca7ab29e083b269&DeviceId=3ds-0000000b2aea5c0c&VideoCodec=h264&AudioCodec=aac&Container=ts&MaxWidth=400&MaxHeight=240&VideoBitRate=472000&AudioBitRate=128000&MaxAudioChannels=2&TranscodingMaxAudioChannels=2&Profile=Baseline&Level=31&MaxRefFrames=2&MediaSourceId=179367f950d9fb9416150c24528e21dd&PlaySessionId=3ds58221402&api_key=2f25a59809784943a42998f928b8cd8a
+[ 167.61] MVD: ProcessNAL ret=0x00017003 nal_size=695 frame#3400
+[ 167.63] MVD: RenderFrame ret=0x00017000
+[ 171.90] MVD: ProcessNAL ret=0x00017003 nal_size=464 frame#3500
+[ 171.92] MVD: RenderFrame ret=0x00017000
+[ 172.95] NET: local file done
+[ 172.96] CONV: thread exiting
+[ 191.80] PLAY: starting video, url_len=64 seek=0 3d=0
+[ 191.86] SUB: local read 29990 bytes
+[ 191.92] SUB: parsed 349 cues (PlayRes 976x720)
+[ 191.93] PLAY: creating threads, prio=48
+[ 191.94] NET: thread started
+[ 191.95] NET: local file sdmc:/3ds/jellyfin-3ds/cache/22c544b43b19f04afde6b392f703df65.ts
+[ 191.96] DEC: thread started, waiting for prefetch (32768 bytes)
+[ 191.99] CONV: thread started
+[ 192.00] NET: estimated duration 1391.3s from file_size=104349212 bps=600000
+[ 192.52] DEC: prefetch done, fill=65536 finished=0
+[ 192.83] DEC: demux OK video=324x240 vidx=0 aidx=1
+[ 192.89] DEC: MVD OK 336x240
+[ 192.91] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[ 192.92] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[ 192.94] AUDIO: found decoder 'aac'
+[ 192.97] AUDIO: decoder opened (swr deferred to first frame)
+[ 193.00] DEC: loop start
+[ 193.03] DEC: first pkt ret=0 is_video=1 size=996
+[ 193.07] DEC: first video pkt size=996 (skipped 0 pts=1.443s base=1.443s adj seek=0s)
+[ 193.10] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[ 193.12] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[ 193.90] CONV: thread exiting
+[ 194.02] NET: local file done
+[ 194.03] PLAY: starting video, url_len=64 seek=307090445 3d=0
+[ 194.09] SUB: local read 29990 bytes
+[ 194.13] SUB: parsed 349 cues (PlayRes 976x720)
+[ 194.15] PLAY: creating threads, prio=48
+[ 194.16] NET: thread started
+[ 194.17] NET: local file sdmc:/3ds/jellyfin-3ds/cache/22c544b43b19f04afde6b392f703df65.ts
+[ 194.19] DEC: thread started, waiting for prefetch (32768 bytes)
+[ 194.22] CONV: thread started
+[ 194.23] NET: estimated duration 1391.3s from file_size=104349212 bps=600000
+[ 194.30] NET: local seek 30.7s target=2303000B sps=2233661B
+[ 194.35] DEC: prefetch done, fill=65536 finished=0
+[ 194.64] DEC: dimensions 0x0 from probe — using cached 324x240
+[ 194.66] DEC: demux OK video=324x240 vidx=0 aidx=1
+[ 194.70] DEC: MVD OK 336x240
+[ 194.72] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[ 194.74] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[ 194.82] AUDIO: found decoder 'aac'
+[ 194.90] AUDIO: decoder opened (swr deferred to first frame)
+[ 195.00] DEC: loop start
+[ 195.04] CONV: thread exiting
+[ 195.09] NET: local file done
+[ 195.14] PLAY: starting video, url_len=64 seek=607090445 3d=0
+[ 195.45] SUB: local read 29990 bytes
+[ 195.53] SUB: parsed 349 cues (PlayRes 976x720)
+[ 195.58] PLAY: creating threads, prio=48
+[ 195.60] NET: thread started
+[ 195.61] NET: local file sdmc:/3ds/jellyfin-3ds/cache/22c544b43b19f04afde6b392f703df65.ts
+[ 195.62] DEC: thread started, waiting for prefetch (32768 bytes)
+[ 195.67] CONV: thread started
+[ 195.68] NET: estimated duration 1391.3s from file_size=104349212 bps=600000
+[ 195.70] DEC: stop during prefetch
+[ 195.72] CONV: thread exiting
+[ 195.81] NET: local seek 60.7s target=4553172B sps=4302789B
+[ 195.83] NET: local file done
+[ 195.84] PLAY: starting video, url_len=64 seek=907090445 3d=0
+[ 195.90] SUB: local read 29990 bytes
+[ 195.94] SUB: parsed 349 cues (PlayRes 976x720)
+[ 195.96] PLAY: creating threads, prio=48
+[ 195.97] NET: thread started
+[ 195.99] NET: local file sdmc:/3ds/jellyfin-3ds/cache/22c544b43b19f04afde6b392f703df65.ts
+[ 196.02] DEC: thread started, waiting for prefetch (32768 bytes)
+[ 196.05] CONV: thread started
+[ 196.07] NET: estimated duration 1391.3s from file_size=104349212 bps=600000
+[ 196.08] CONV: thread exiting
+[ 196.10] DEC: stop during prefetch
+[ 196.14] NET: local seek 90.7s target=6803156B sps=6685877B
+[ 196.16] NET: local file done
+[ 196.17] PLAY: starting video, url_len=64 seek=1207090445 3d=0
+[ 196.22] SUB: local read 29990 bytes
+[ 196.27] SUB: parsed 349 cues (PlayRes 976x720)
+[ 196.29] PLAY: creating threads, prio=48
+[ 196.30] NET: thread started
+[ 196.31] NET: local file sdmc:/3ds/jellyfin-3ds/cache/22c544b43b19f04afde6b392f703df65.ts
+[ 196.33] DEC: thread started, waiting for prefetch (32768 bytes)
+[ 196.35] CONV: thread started
+[ 196.37] NET: estimated duration 1391.3s from file_size=104349212 bps=600000
+[ 196.84] DEC: stop during prefetch
+[ 196.87] CONV: thread exiting
+[ 196.97] NET: local seek 120.7s target=9053140B sps=8785837B
+[ 196.99] NET: local file done
+[ 197.00] PLAY: starting video, url_len=64 seek=1507090445 3d=0
+[ 197.06] SUB: local read 29990 bytes
+[ 197.10] SUB: parsed 349 cues (PlayRes 976x720)
+[ 197.12] PLAY: creating threads, prio=48
+[ 197.13] NET: thread started
+[ 197.14] NET: local file sdmc:/3ds/jellyfin-3ds/cache/22c544b43b19f04afde6b392f703df65.ts
+[ 197.15] DEC: thread started, waiting for prefetch (32768 bytes)
+[ 197.19] CONV: thread started
+[ 197.20] NET: estimated duration 1391.3s from file_size=104349212 bps=600000
+[ 197.27] NET: local seek 150.7s target=11303124B sps=11224573B
+[ 197.31] DEC: prefetch done, fill=65536 finished=0
+[ 197.53] CONV: thread exiting
+[ 197.56] NET: local file done
+[ 197.61] DEC: dimensions 0x0 from probe — using cached 324x240
+[ 197.63] DEC: demux OK video=324x240 vidx=0 aidx=1
+[ 197.66] DEC: MVD OK 336x240
+[ 197.68] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[ 197.69] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[ 197.70] AUDIO: found decoder 'aac'
+[ 197.72] AUDIO: decoder opened (swr deferred to first frame)
+[ 197.74] DEC: loop start
+[ 197.75] PLAY: starting video, url_len=64 seek=1807090445 3d=0
+[ 197.81] SUB: local read 29990 bytes
+[ 197.86] SUB: parsed 349 cues (PlayRes 976x720)
+[ 197.89] PLAY: creating threads, prio=48
+[ 197.90] NET: thread started
+[ 197.91] NET: local file sdmc:/3ds/jellyfin-3ds/cache/22c544b43b19f04afde6b392f703df65.ts
+[ 197.93] DEC: thread started, waiting for prefetch (32768 bytes)
+[ 197.96] CONV: thread started
+[ 197.97] NET: estimated duration 1391.3s from file_size=104349212 bps=600000
+[ 198.02] NET: local seek 180.7s target=13553108B sps=13532837B
+[ 198.25] DEC: prefetch done, fill=65536 finished=0
+[ 198.63] DEC: dimensions 0x0 from probe — using cached 324x240
+[ 198.70] DEC: demux OK video=324x240 vidx=0 aidx=1
+[ 198.77] DEC: MVD OK 336x240
+[ 198.82] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[ 198.87] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[ 198.93] AUDIO: found decoder 'aac'
+[ 198.98] AUDIO: decoder opened (swr deferred to first frame)
+[ 199.06] DEC: loop start
+[ 199.12] DEC: first pkt ret=0 is_video=0 size=340
+[ 199.17] DEC: pre-roll skip=1 ring_fill=262144
+[ 199.22] DEC: first video pkt size=17 (skipped 8 pts=180.788s base=1.443s adj seek=180s)
+[ 199.26] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[ 199.28] MVD: ProcessNAL FAILED ret=0xD96170CA
+[ 199.31] MVD: ProcessNAL FAILED ret=0xD96170CA
+[ 199.34] MVD: ProcessNAL FAILED ret=0xD96170CA
+[ 199.38] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[ 199.49] MVD: ProcessNAL FAILED ret=0xD96170CA
+[ 200.09] MVD: ProcessNAL FAILED ret=0xD96170CA
+[ 200.11] MVD: ProcessNAL FAILED ret=0xD96170CA
+[ 200.12] MVD: ProcessNAL FAILED ret=0xD96170CA
+[ 200.23] MVD: ProcessNAL FAILED ret=0xD96170CA
+[ 200.25] MVD: ProcessNAL FAILED ret=0xD96170CA
+[ 200.27] MVD: ProcessNAL FAILED ret=0xD96170CA
+[ 200.29] MVD: ProcessNAL FAILED ret=0xD96170CA
+[ 200.40] MVD: ProcessNAL FAILED ret=0xD96170CA
+[ 200.42] MVD: ProcessNAL FAILED ret=0xD96170CA
+[ 200.44] MVD: ProcessNAL FAILED ret=0xD96170CA
+[ 200.46] MVD: ProcessNAL FAILED ret=0xD96170CA
+[ 200.58] MVD: ProcessNAL FAILED ret=0xD96170CA
+[ 202.11] MVD: ProcessNAL ret=0x00017003 nal_size=266 frame#3600
+[ 202.13] MVD: RenderFrame ret=0x00017000
+[ 202.33] SUB: local read 29990 bytes
+[ 202.38] SUB: parsed 349 cues (PlayRes 976x720)
+[ 204.75] SUB: local read 29990 bytes
+[ 204.81] SUB: parsed 349 cues (PlayRes 976x720)
+[ 206.34] MVD: ProcessNAL ret=0x00017003 nal_size=187 frame#3700
+[ 206.76] MVD: RenderFrame ret=0x00017000
+[ 207.51] NET: local file done
+[ 207.53] CONV: thread exiting
+[ 477.85] VDL: attempt 1/3 curl=0 http=200 bytes=102255080 offset=0
+[ 479.58] VDL: saved 179367f950d9fb9416150c24528e21dd.ass
+[ 479.60] VDL: saved 179367f950d9fb9416150c24528e21dd.ts (102255105 bytes)
+[ 590.91] PLAY: starting video, url_len=64 seek=0 3d=0
+[ 590.93] SUB: local read 25 bytes
+[ 590.94] SUB: no Dialogue lines
+[ 590.96] PLAY: creating threads, prio=48
+[ 591.00] NET: thread started
+[ 591.01] NET: local file sdmc:/3ds/jellyfin-3ds/cache/179367f950d9fb9416150c24528e21dd.ts
+[ 591.02] DEC: thread started, waiting for prefetch (32768 bytes)
+[ 591.06] CONV: thread started
+[ 591.07] NET: estimated duration 1363.4s from file_size=102255080 bps=600000
+[ 591.11] DEC: prefetch done, fill=65536 finished=0
+[ 591.54] DEC: demux OK video=324x240 vidx=0 aidx=1
+[ 591.59] DEC: MVD OK 336x240
+[ 591.61] DEC: no extradata — TS stream, SPS/PPS inline in NAL units
+[ 591.64] AUDIO: codec_id=86018 sample_rate=0 channels=0
+[ 591.67] AUDIO: found decoder 'aac'
+[ 591.71] AUDIO: decoder opened (swr deferred to first frame)
+[ 591.73] DEC: loop start
+[ 591.76] DEC: first pkt ret=0 is_video=1 size=8576
+[ 591.79] DEC: first video pkt size=8576 (skipped 0 pts=1.424s base=1.424s adj seek=0s)
+[ 591.82] TEX: init OK 324x240 in 512x256 tex (double buffered)
+[ 591.84] AUDIO: swr init OK (deferred) fmt=8 rate=48000 ch=0
+[ 595.16] MVD: ProcessNAL ret=0x00017003 nal_size=2227 frame#3800
+[ 595.18] MVD: RenderFrame ret=0x00017000
+[ 595.73] SUB: local read 25 bytes
+[ 595.74] SUB: no Dialogue lines
+[ 599.27] MVD: ProcessNAL ret=0x00017003 nal_size=1675 frame#3900
+[ 599.29] MVD: RenderFrame ret=0x00017000
+[ 603.52] MVD: ProcessNAL ret=0x00017003 nal_size=4076 frame#4000
+[ 603.54] MVD: RenderFrame ret=0x00017000
+[ 607.65] MVD: ProcessNAL ret=0x00017003 nal_size=1568 frame#4100
+[ 607.66] MVD: RenderFrame ret=0x00017000
+[ 611.91] MVD: ProcessNAL ret=0x00017003 nal_size=9854 frame#4200
+[ 611.93] MVD: RenderFrame ret=0x00017000
+[ 616.02] MVD: ProcessNAL ret=0x00017003 nal_size=3088 frame#4300
+[ 616.04] MVD: RenderFrame ret=0x00017000
+[ 616.82] AUDIO: wbuf[1] 500ms timeout, dropping frame (status=2)
+[ 617.36] AUDIO: wbuf[2] 500ms timeout, dropping frame (status=1)
+[ 617.94] AUDIO: wbuf[3] 500ms timeout, dropping frame (status=1)
+[ 618.51] AUDIO: wbuf[0] 500ms timeout, dropping frame (status=1)
+[ 619.08] AUDIO: wbuf[1] 500ms timeout, dropping frame (status=2)
+[ 619.64] AUDIO: wbuf[2] 500ms timeout, dropping frame (status=1)
+[ 620.21] AUDIO: wbuf[3] 500ms timeout, dropping frame (status=1)
+[ 620.79] AUDIO: wbuf[0] 500ms timeout, dropping frame (status=1)
+[ 620.96] NET: local file done
+[ 621.00] CONV: thread exiting
+[ 621.05] === log closed ===
