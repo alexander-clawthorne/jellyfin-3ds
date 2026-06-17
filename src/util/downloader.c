@@ -87,6 +87,38 @@ static void vdl_thread_func(void *arg)
 {
     (void)arg;
 
+    /* Subtitle-only: skip video download entirely */
+    if (strcmp(s_vdl.ext, "ass") == 0) {
+        if (s_vdl.subtitle_url[0]) {
+            char ass_path[192];
+            if (cache_path(s_vdl.item_id, "ass", ass_path, sizeof(ass_path))) {
+                CURL *scurl = curl_easy_init();
+                if (scurl) {
+                    FILE *afp = fopen(ass_path, "wb");
+                    if (afp) {
+                        curl_easy_setopt(scurl, CURLOPT_URL,           s_vdl.subtitle_url);
+                        curl_easy_setopt(scurl, CURLOPT_WRITEFUNCTION, vdl_write_cb);
+                        curl_easy_setopt(scurl, CURLOPT_WRITEDATA,     afp);
+                        curl_easy_setopt(scurl, CURLOPT_FOLLOWLOCATION,1L);
+                        curl_easy_setopt(scurl, CURLOPT_SSL_VERIFYPEER,0L);
+                        curl_easy_setopt(scurl, CURLOPT_TIMEOUT,       30L);
+                        CURLcode src = curl_easy_perform(scurl);
+                        fclose(afp);
+                        if (src == CURLE_OK)
+                            log_write("VDL: saved %s.ass", s_vdl.item_id);
+                        else {
+                            log_write("VDL: ASS-only download failed: %s", curl_easy_strerror(src));
+                            remove(ass_path);
+                        }
+                    }
+                    curl_easy_cleanup(scurl);
+                }
+            }
+        }
+        s_vdl.state = DL_DONE;
+        return;
+    }
+
     /* Book/CBZ or audio: if already in cache, just write .txt and done */
     if (!s_vdl.is_video && cache_has(s_vdl.item_id, s_vdl.ext)) {
         log_write("VDL: %s.%s already cached", s_vdl.item_id, s_vdl.ext);
@@ -284,6 +316,26 @@ bool dl_queue_video(const char *item_id, const char *item_name,
     strncpy(q->ext, "ts", sizeof(q->ext)-1);
     q->is_video      = true;
     q->runtime_ticks = runtime_ticks;
+    if (s_vdl.state == DL_IDLE) dl_process_queue();
+    return true;
+}
+
+bool dl_queue_subtitle_only(const char *item_id, const char *item_name,
+                            const char *subtitle_url)
+{
+    if (s_q_count >= DL_QUEUE_MAX) return false;
+    dl_q_item_t *q = &s_queue[s_q_count++];
+    strncpy(q->item_id,      item_id,      sizeof(q->item_id)-1);
+    q->item_id[sizeof(q->item_id)-1] = '\0';
+    strncpy(q->item_name,    item_name,    sizeof(q->item_name)-1);
+    q->item_name[sizeof(q->item_name)-1] = '\0';
+    q->url[0]      = '\0';
+    q->sub_name[0] = '\0';
+    strncpy(q->subtitle_url, subtitle_url, sizeof(q->subtitle_url)-1);
+    q->subtitle_url[sizeof(q->subtitle_url)-1] = '\0';
+    strncpy(q->ext, "ass", sizeof(q->ext)-1);
+    q->is_video      = false;
+    q->runtime_ticks = 0;
     if (s_vdl.state == DL_IDLE) dl_process_queue();
     return true;
 }
