@@ -118,6 +118,8 @@ static struct {
     /* Offline cache: url is an sdmc:/ path, played without the network
      * thread or ring buffer (FFmpeg opens the file directly, seekable) */
     bool            is_local;
+    int64_t         seek_hint_local; /* seek_offset saved before NET zeroes it */
+    int64_t         local_pts_base;  /* file PTS at episode-time 0 (set on first seek=0 play) */
     C3D_Tex         frame_tex_right[2]; /* right eye double-buffered (3D only) */
     C2D_Image       frame_img_right;
 
@@ -369,7 +371,9 @@ static void net_thread_func(void *arg)
                 }
             }
             /* Stream PTS already reflects file position — zero out so
-             * decode thread doesn't double-add the seek offset. */
+             * decode thread doesn't double-add the seek offset. Save it
+             * first so the DEC thread can compute the correct pts base. */
+            s_vp.seek_hint_local   = s_vp.seek_offset_ticks;
             s_vp.seek_offset_ticks = 0;
             s_vp.position_ticks    = 0;
         }
@@ -761,6 +765,22 @@ static void decode_thread_func(void *arg)
                     s_vp.seek_offset_ticks -= (int64_t)(first_video_pts * 10000000.0);
                     log_write("DEC: first video pkt size=%d (skipped %d pre-roll pkts, pts=%.3fs, offset adj)",
                               pkt->size, audio_skipped, first_video_pts);
+                } else if (s_vp.is_local && pkt->pts != AV_NOPTS_VALUE) {
+                    AVFormatContext *_fmt = (AVFormatContext *)s_vp.demux.fmt_ctx;
+                    AVRational _tb = _fmt->streams[s_vp.demux.video_stream_idx]->time_base;
+                    double first_video_pts = pkt->pts * (double)_tb.num / (double)_tb.den;
+                    int64_t fps_ticks = (int64_t)(first_video_pts * 10000000.0);
+                    if (s_vp.seek_hint_local == 0)
+                        s_vp.local_pts_base = fps_ticks;
+                    if (s_vp.local_pts_base > 0) {
+                        s_vp.seek_offset_ticks = -s_vp.local_pts_base;
+                    } else {
+                        s_vp.seek_offset_ticks = s_vp.seek_hint_local - fps_ticks;
+                    }
+                    log_write("DEC: first video pkt size=%d (skipped %d pts=%.3fs base=%.3fs adj seek=%llds)",
+                              pkt->size, audio_skipped, first_video_pts,
+                              (double)s_vp.local_pts_base / 10000000.0,
+                              (long long)(s_vp.seek_hint_local / 10000000LL));
                 } else {
                     log_write("DEC: first video pkt size=%d (skipped %d audio pre-roll pkts)",
                               pkt->size, audio_skipped);
@@ -1338,6 +1358,14 @@ bool video_player_play(const char *url, const char *subtitle_url,
     log_write("PLAY: starting video, url_len=%d seek=%lld 3d=%d",
               (int)strlen(url), (long long)seek_offset_ticks, (int)mode_3d);
     video_player_stop();
+
+    /* Reset PTS base when switching files so DEC recomputes it on first pkt */
+    if (strncmp(url, "http", 4) != 0) {
+        if (strcmp(url, s_vp.url) != 0)
+            s_vp.local_pts_base = 0;
+    } else {
+        s_vp.local_pts_base = 0;
+    }
 
     snprintf(s_vp.url, sizeof(s_vp.url), "%s", url);
     s_vp.duration_ticks = duration_ticks;
