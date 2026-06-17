@@ -55,12 +55,10 @@ void cache_init(void)
         const char *n = ent->d_name;
         if (n[0] == '.') continue;
         size_t len = strlen(n);
-        /* Skip in-progress leftovers from interrupted downloads */
+        /* Keep .part files — downloader resumes from them if the same item
+         * is re-queued.  They are not complete so skip the index. */
         if (len > 5 && strcmp(n + len - 5, ".part") == 0) {
-            char stale[512];
-            snprintf(stale, sizeof(stale), CACHE_DIR "/%s", n);
-            remove(stale);
-            log_write("CACHE: removed stale partial %s", n);
+            log_write("CACHE: found partial %s (kept for resume)", n);
             continue;
         }
         if (len < CACHE_NAME_LEN) {

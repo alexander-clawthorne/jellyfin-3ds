@@ -242,6 +242,7 @@ static jfin_item_type_t parse_item_type(const char *type_str)
     if (strcmp(type_str, "Series") == 0) return JFIN_ITEM_SERIES;
     if (strcmp(type_str, "Season") == 0) return JFIN_ITEM_SEASON;
     if (strcmp(type_str, "Episode") == 0) return JFIN_ITEM_EPISODE;
+    if (strcmp(type_str, "Book") == 0)    return JFIN_ITEM_BOOK;
     return JFIN_ITEM_UNKNOWN;
 }
 
@@ -252,9 +253,12 @@ static void parse_item(const cJSON *obj, jfin_item_t *item)
     json_get_string(obj, "Name", item->name, sizeof(item->name));
     json_get_string(obj, "Album", item->album, sizeof(item->album));
     json_get_string(obj, "SeriesName", item->series_name, sizeof(item->series_name));
+    json_get_string(obj, "ParentId", item->parent_id, sizeof(item->parent_id));
     item->year = json_get_int(obj, "ProductionYear", 0);
-    item->index_number = json_get_int(obj, "IndexNumber", 0);
+    item->index_number  = json_get_int(obj, "IndexNumber", 0);
+    item->season_number = json_get_int(obj, "ParentIndexNumber", 0);
     item->runtime_ticks = json_get_int64(obj, "RunTimeTicks", 0);
+    item->page_count    = json_get_int(obj, "ChildCount", 0);
 
     /* Artist can be in AlbumArtist or Artists array */
     json_get_string(obj, "AlbumArtist", item->artist, sizeof(item->artist));
@@ -427,7 +431,7 @@ bool jfin_get_items(const jfin_session_t *session, const char *parent_id,
     snprintf(url, sizeof(url),
              "%s/Users/%s/Items?ParentId=%s&StartIndex=%d&Limit=%d"
              "&SortBy=SortName&SortOrder=Ascending"
-             "&Fields=PrimaryImageAspectRatio,BasicSyncInfo",
+             "&Fields=PrimaryImageAspectRatio,BasicSyncInfo,ParentId",
              session->server_url, session->user_id, parent_id,
              start_index, limit);
 
@@ -506,6 +510,36 @@ bool jfin_search(const jfin_session_t *session, const char *query,
     return true;
 }
 
+bool jfin_get_item_parent_id(const jfin_session_t *session, const char *item_id,
+                              char *parent_id_out, int out_len)
+{
+    char url[JFIN_URL_BUF];
+    snprintf(url, sizeof(url), "%s/Users/%s/Items/%s",
+             session->server_url, session->user_id, item_id);
+    cJSON *json = api_get(session, url);
+    if (!json) return false;
+    parent_id_out[0] = '\0';
+    json_get_string(json, "ParentId", parent_id_out, out_len);
+    cJSON_Delete(json);
+    return parent_id_out[0] != '\0';
+}
+
+bool jfin_get_siblings(const jfin_session_t *session, const char *parent_id,
+                       int limit, jfin_item_list_t *out)
+{
+    char url[JFIN_URL_BUF];
+    snprintf(url, sizeof(url),
+             "%s/Users/%s/Items?ParentId=%s&Limit=%d"
+             "&SortBy=IndexNumber&SortOrder=Ascending"
+             "&Fields=PrimaryImageAspectRatio,BasicSyncInfo,ParentId",
+             session->server_url, session->user_id, parent_id, limit);
+    cJSON *json = api_get(session, url);
+    if (!json) return false;
+    parse_item_list(json, out);
+    cJSON_Delete(json);
+    return true;
+}
+
 bool jfin_get_audio_stream(const jfin_session_t *session, const char *item_id,
                            int64_t start_ticks, jfin_stream_t *out)
 {
@@ -535,6 +569,7 @@ bool jfin_get_audio_stream(const jfin_session_t *session, const char *item_id,
 
 bool jfin_get_video_stream(const jfin_session_t *session, const char *item_id,
                            int64_t start_ticks, bool is_3d,
+                           int subtitle_stream_index,
                            jfin_stream_t *out)
 {
     memset(out, 0, sizeof(*out));
@@ -571,21 +606,72 @@ bool jfin_get_video_stream(const jfin_session_t *session, const char *item_id,
              item_id, (unsigned long)(tick & 0xFFFFFFFF), session->access_token);
 
     if (start_ticks > 0 && len > 0 && len < (int)sizeof(out->url) - 40) {
-        /* The base URL above already carries a PlaySessionId that is
-         * unique per call (fresh tick), which is what busts Jellyfin's
-         * per-item+device transcode cache on seek. Appending a second
-         * PlaySessionId here (the old behavior) sent two different
-         * session ids in one request. */
-        snprintf(out->url + len, sizeof(out->url) - len,
+        len += snprintf(out->url + len, sizeof(out->url) - len,
                  "&StartTimeTicks=%lld", (long long)start_ticks);
         log_write("SEEK: StartTimeTicks=%lld session=3ds%08lx",
                   (long long)start_ticks, (unsigned long)(tick & 0xFFFFFFFF));
     }
 
+    if (subtitle_stream_index >= 0 && len > 0 && len < (int)sizeof(out->url) - 48)
+        snprintf(out->url + len, sizeof(out->url) - len,
+                 "&SubtitleStreamIndex=%d&SubtitleMethod=Encode",
+                 subtitle_stream_index);
+
     snprintf(out->container, sizeof(out->container), "%s", "ts");
     out->is_transcoding = true;
 
     return true;
+}
+
+bool jfin_get_subtitle_streams(const jfin_session_t *session, const char *item_id,
+                               jfin_subtitle_list_t *out)
+{
+    memset(out, 0, sizeof(*out));
+
+    char url[JFIN_URL_BUF];
+    snprintf(url, sizeof(url),
+             "%s/Items/%s?UserId=%s&Fields=MediaStreams",
+             session->server_url, item_id, session->user_id);
+
+    cJSON *root = api_get(session, url);
+    if (!root) return false;
+
+    cJSON *sources = cJSON_GetObjectItemCaseSensitive(root, "MediaSources");
+    if (!cJSON_IsArray(sources) || cJSON_GetArraySize(sources) == 0) {
+        cJSON_Delete(root);
+        return false;
+    }
+
+    cJSON *source = cJSON_GetArrayItem(sources, 0);
+    cJSON *streams = cJSON_GetObjectItemCaseSensitive(source, "MediaStreams");
+    if (!cJSON_IsArray(streams)) {
+        cJSON_Delete(root);
+        return false;
+    }
+
+    cJSON *stream;
+    cJSON_ArrayForEach(stream, streams) {
+        if (out->count >= JFIN_MAX_SUBTITLES) break;
+        cJSON *type = cJSON_GetObjectItemCaseSensitive(stream, "Type");
+        if (!cJSON_IsString(type) || strcmp(type->valuestring, "Subtitle") != 0)
+            continue;
+        jfin_subtitle_t *s = &out->subs[out->count++];
+        cJSON *idx  = cJSON_GetObjectItemCaseSensitive(stream, "Index");
+        cJSON *lang = cJSON_GetObjectItemCaseSensitive(stream, "Language");
+        cJSON *disp = cJSON_GetObjectItemCaseSensitive(stream, "DisplayTitle");
+        cJSON *def  = cJSON_GetObjectItemCaseSensitive(stream, "IsDefault");
+        cJSON *forc = cJSON_GetObjectItemCaseSensitive(stream, "IsForced");
+        s->index      = cJSON_IsNumber(idx) ? (int)idx->valuedouble : 0;
+        s->is_default = cJSON_IsTrue(def);
+        s->is_forced  = cJSON_IsTrue(forc);
+        if (cJSON_IsString(lang))
+            snprintf(s->language, sizeof(s->language), "%s", lang->valuestring);
+        if (cJSON_IsString(disp))
+            snprintf(s->title, sizeof(s->title), "%s", disp->valuestring);
+    }
+
+    cJSON_Delete(root);
+    return out->count > 0;
 }
 
 void jfin_get_image_url_for_item(const jfin_session_t *session,

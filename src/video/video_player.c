@@ -25,6 +25,9 @@
 #include "video/video_player.h"
 #include "video/ffmpeg_demux.h"
 #include "video/mvd_decode.h"
+#include "util/config.h"
+
+extern jfin_config_t g_config;
 
 /* ── Ring buffer for network data ──────────────────────────────────── */
 
@@ -288,6 +291,95 @@ static void net_thread_func(void *arg)
 {
     (void)arg;
     log_write("NET: thread started");
+
+    /* Local file (sdmc:/) — bypass curl, read directly into ring buffer */
+    if (strncmp(s_vp.url, "sdmc:", 5) == 0) {
+        log_write("NET: local file %s", s_vp.url);
+        FILE *lf = fopen(s_vp.url, "rb");
+        if (!lf) {
+            log_write("NET: cannot open local file");
+            snprintf(s_vp.error_msg, sizeof(s_vp.error_msg), "Cannot open local file");
+            s_vp.state = VIDEO_ERROR;
+            __atomic_store_n(&s_vp.demux.ring_finished, true, __ATOMIC_RELEASE);
+            return;
+        }
+        static char s_local_buf[65536];
+        /* Get file size for duration estimate and byte-level seeking */
+        fseek(lf, 0, SEEK_END);
+        long file_size = ftell(lf);
+        fseek(lf, 0, SEEK_SET);
+
+        if (file_size > 0) {
+            /* Estimate duration from file size + configured bitrate when unknown */
+            if (s_vp.duration_ticks == 0) {
+                long total_bps = (long)(g_config.video_bitrate + g_config.audio_bitrate) * 1000L;
+                if (total_bps > 0) {
+                    double dur_secs = (double)file_size * 8.0 / (double)total_bps;
+                    s_vp.duration_ticks = (int64_t)(dur_secs * 10000000.0);
+                    log_write("NET: estimated duration %.1fs from file_size=%ld bps=%ld",
+                              dur_secs, file_size, total_bps);
+                }
+            }
+
+            /* Byte-level seek proportional to seek_offset_ticks / duration */
+            int64_t dur       = s_vp.duration_ticks;
+            int64_t seek_hint = s_vp.seek_offset_ticks;
+            if (seek_hint > 0 && dur > 0) {
+                long seek_bytes = (long)((double)file_size *
+                                         (double)seek_hint / (double)dur);
+                seek_bytes = (seek_bytes / 188) * 188;
+                if (seek_bytes > 0 && seek_bytes < file_size) {
+                    /* Scan backward for the H.264 SPS NAL start code (00 00 01 67).
+                     * Without an SPS in FFmpeg's probe window, avformat_find_stream_info
+                     * returns video=0x0, the MVD is initialised with 0x0 dimensions,
+                     * and every subsequent ProcessNAL fails with 0xD96170CA forever.
+                     * Reading from the nearest preceding SPS guarantees the first
+                     * 64 KB fed to FFmpeg contains the SPS and valid dimensions. */
+                    long sps_pos   = seek_bytes;
+                    long scan_end  = seek_bytes;
+                    long scan_lim  = seek_bytes - (5L * 1024 * 1024);
+                    if (scan_lim < 0) scan_lim = 0;
+                    bool sps_found = false;
+                    while (!sps_found && scan_end > scan_lim) {
+                        long cs = scan_end - (long)sizeof(s_local_buf);
+                        if (cs < 0) cs = 0;
+                        long cl = scan_end - cs;
+                        fseek(lf, cs, SEEK_SET);
+                        size_t nr = fread(s_local_buf, 1, (size_t)cl, lf);
+                        for (long i = (long)nr - 4; i >= 0 && !sps_found; i--) {
+                            if ((unsigned char)s_local_buf[i]     == 0x00 &&
+                                (unsigned char)s_local_buf[i + 1] == 0x00 &&
+                                (unsigned char)s_local_buf[i + 2] == 0x01 &&
+                                (unsigned char)s_local_buf[i + 3] == 0x67) {
+                                sps_pos   = cs + i;
+                                sps_found = true;
+                            }
+                        }
+                        scan_end = cs;
+                    }
+                    fseek(lf, sps_pos, SEEK_SET);
+                    log_write("NET: local seek %.1fs target=%ldB sps=%ldB%s",
+                              (double)seek_hint / 10000000.0, seek_bytes, sps_pos,
+                              sps_found ? "" : " (SPS not found)");
+                }
+            }
+            /* Stream PTS already reflects file position — zero out so
+             * decode thread doesn't double-add the seek offset. */
+            s_vp.seek_offset_ticks = 0;
+            s_vp.position_ticks    = 0;
+        }
+
+        size_t n;
+        while (!s_vp.stop_requested &&
+               (n = fread(s_local_buf, 1, sizeof(s_local_buf), lf)) > 0) {
+            net_write_cb(s_local_buf, 1, n, &s_vp.demux);
+        }
+        fclose(lf);
+        __atomic_store_n(&s_vp.demux.ring_finished, true, __ATOMIC_RELEASE);
+        log_write("NET: local file done");
+        return;
+    }
+
     CURL *curl = curl_easy_init();
     if (!curl) {
         log_write("NET: curl_easy_init failed");
@@ -524,24 +616,20 @@ static void decode_thread_func(void *arg)
 {
     (void)arg;
 
-    if (!s_vp.is_local) {
-        log_write("DEC: thread started, waiting for prefetch (%d bytes)", PREFETCH_BYTES);
+    log_write("DEC: thread started, waiting for prefetch (%d bytes)", PREFETCH_BYTES);
 
-        /* Wait for prefetch */
-        while (!s_vp.stop_requested) {
-            if (__atomic_load_n(&s_vp.demux.ring_fill, __ATOMIC_ACQUIRE) >= PREFETCH_BYTES
-                || __atomic_load_n(&s_vp.demux.ring_finished, __ATOMIC_ACQUIRE))
-                break;
-            svcSleepThread(10000000LL); /* 10ms */
-        }
-        if (s_vp.stop_requested) { log_write("DEC: stop during prefetch"); return; }
-
-        log_write("DEC: prefetch done, fill=%d finished=%d",
-                  __atomic_load_n(&s_vp.demux.ring_fill, __ATOMIC_ACQUIRE),
-                  __atomic_load_n(&s_vp.demux.ring_finished, __ATOMIC_ACQUIRE));
-    } else {
-        log_write("DEC: thread started (local file, no prefetch)");
+    /* Wait for ring buffer to fill (both network and local fread paths) */
+    while (!s_vp.stop_requested) {
+        if (__atomic_load_n(&s_vp.demux.ring_fill, __ATOMIC_ACQUIRE) >= PREFETCH_BYTES
+            || __atomic_load_n(&s_vp.demux.ring_finished, __ATOMIC_ACQUIRE))
+            break;
+        svcSleepThread(10000000LL); /* 10ms */
     }
+    if (s_vp.stop_requested) { log_write("DEC: stop during prefetch"); return; }
+
+    log_write("DEC: prefetch done, fill=%d finished=%d",
+              __atomic_load_n(&s_vp.demux.ring_fill, __ATOMIC_ACQUIRE),
+              __atomic_load_n(&s_vp.demux.ring_finished, __ATOMIC_ACQUIRE));
 
     /* Init demuxer */
     if (!demux_init(&s_vp.demux)) {
@@ -931,20 +1019,21 @@ bool video_player_play(const char *url, int64_t duration_ticks,
     s_vp.new_tex_ready = false;
     s_vp.audio_buf_idx = 0;
 
-    /* Anything that isn't http(s) is a cached file on the SD card */
+    /* Anything that isn't http(s) is a cached file on the SD card.
+     * Local files use the same ring buffer path as network — net_thread
+     * fread()s the file rather than using curl. avformat_open_input does
+     * not support sdmc:/ paths, so we never set local_path. */
     s_vp.is_local = (strncmp(url, "http", 4) != 0);
-    s_vp.demux.local_path = s_vp.is_local ? s_vp.url : NULL;
+    s_vp.demux.local_path = NULL;
 
-    if (!s_vp.is_local) {
-        /* Allocate ring buffer (network playback only) */
-        s_vp.demux.ring_data = malloc(RING_SIZE);
-        if (!s_vp.demux.ring_data) return false;
-        s_vp.demux.ring_size = RING_SIZE;
-        s_vp.demux.ring_write_pos = 0;
-        s_vp.demux.ring_read_pos = 0;
-        s_vp.demux.ring_fill = 0;
-        s_vp.demux.ring_finished = false;
-    }
+    /* Allocate ring buffer (used for both network and local fread paths) */
+    s_vp.demux.ring_data = malloc(RING_SIZE);
+    if (!s_vp.demux.ring_data) return false;
+    s_vp.demux.ring_size = RING_SIZE;
+    s_vp.demux.ring_write_pos = 0;
+    s_vp.demux.ring_read_pos = 0;
+    s_vp.demux.ring_fill = 0;
+    s_vp.demux.ring_finished = false;
 
     /* Reset NDSP channel. Set the channel field now rather than in
      * init_audio_decoder so a stop() before audio init doesn't clear
@@ -957,16 +1046,14 @@ bool video_player_play(const char *url, int64_t duration_ticks,
     svcGetThreadPriority(&prio, CUR_THREAD_HANDLE);
     log_write("PLAY: creating threads, prio=%ld", (long)prio);
 
-    if (!s_vp.is_local)
-        s_vp.net_thread = threadCreate(net_thread_func, NULL,
-                                        32 * 1024, prio - 1, -1, false);
+    s_vp.net_thread = threadCreate(net_thread_func, NULL,
+                                    32 * 1024, prio - 1, -1, false);
     s_vp.decode_thread = threadCreate(decode_thread_func, NULL,
                                        64 * 1024, prio - 1, -1, false);
     s_vp.convert_thread = threadCreate(convert_thread_func, NULL,
                                         32 * 1024, prio, -1, false);
 
-    if ((!s_vp.net_thread && !s_vp.is_local) ||
-        !s_vp.decode_thread || !s_vp.convert_thread) {
+    if (!s_vp.net_thread || !s_vp.decode_thread || !s_vp.convert_thread) {
         snprintf(s_vp.error_msg, sizeof(s_vp.error_msg),
                  "Thread create failed (net=%p dec=%p)",
                  (void*)s_vp.net_thread, (void*)s_vp.decode_thread);

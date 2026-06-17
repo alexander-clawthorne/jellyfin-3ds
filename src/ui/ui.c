@@ -9,7 +9,10 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <dirent.h>
+#include <sys/stat.h>
 #include <3ds.h>
 #include <citro2d.h>
 
@@ -18,11 +21,11 @@
 #include "audio/player.h"
 #include "video/video_player.h"
 #include "ui/album_art.h"
-#include "util/cache.h"
+#include "ui/reader.h"
 #include "util/config.h"
+#include "util/downloader.h"
+#include "util/cache.h"
 #include "util/log.h"
-
-#include <curl/curl.h>
 
 extern jfin_config_t g_config;
 
@@ -44,6 +47,175 @@ static u32 rgba(u32 hex)
     u8 b = (hex >> 8)  & 0xFF;
     u8 a = hex & 0xFF;
     return C2D_Color32(r, g, b, a);
+}
+
+static u32 bg_color(void)
+{
+    switch (g_config.bg_theme) {
+        case 1:  return rgba(0x000000FF);
+        case 2:  return rgba(0xEEEEEEFF);
+        case 3:  return rgba(0x505050FF);
+        default: return rgba(COLOR_BG_DARK);
+    }
+}
+
+/* ── Download manager (file list on SD card) ───────────────────────── */
+
+#define MAX_DL_ENTRIES 64
+
+typedef struct {
+    char   item_id[80];  /* item id for cache_remove() */
+    char   name[128];    /* display name */
+    char   path[192];    /* full path for deletion */
+    size_t sz;           /* bytes */
+    bool   is_video;
+    int    dl_type;      /* 0=video, 1=cbz, 2=audio */
+    char   series[64];   /* series/album name for sorting */
+    int    season_num;   /* season or volume number */
+    int    ep_num;       /* episode or chapter number */
+} dl_entry_t;
+
+static dl_entry_t s_dl_entries[MAX_DL_ENTRIES];
+static int        s_dl_count = 0;
+
+/* Parse "Series / Season N / E## - Title" or "Series / Volume N / Chapter M" into
+ * sort fields. Handles any " / "-delimited breadcrumb. */
+static void dl_parse_metadata(dl_entry_t *e)
+{
+    e->series[0] = '\0';
+    e->season_num = 0;
+    e->ep_num = 0;
+
+    char tmp[128];
+    strncpy(tmp, e->name, sizeof(tmp)-1);
+    tmp[sizeof(tmp)-1] = '\0';
+
+    char *p1 = strstr(tmp, " / ");
+    if (!p1) {
+        strncpy(e->series, tmp, sizeof(e->series)-1);
+        e->series[sizeof(e->series)-1] = '\0';
+        return;
+    }
+    *p1 = '\0';
+    strncpy(e->series, tmp, sizeof(e->series)-1);
+    e->series[sizeof(e->series)-1] = '\0';
+
+    char *p2 = strstr(p1 + 3, " / ");
+    if (p2) {
+        /* Season/Volume part */
+        char spart[32];
+        int slen = (int)(p2 - (p1 + 3));
+        if (slen > 31) slen = 31;
+        strncpy(spart, p1 + 3, slen);
+        spart[slen] = '\0';
+        const char *snum = spart;
+        while (*snum && (*snum < '0' || *snum > '9')) snum++;
+        e->season_num = (*snum) ? atoi(snum) : 0;
+        /* Episode/Chapter part */
+        const char *ep = p2 + 3;
+        if (*ep == 'E' || *ep == 'e') ep++;
+        else { while (*ep && (*ep < '0' || *ep > '9')) ep++; }
+        e->ep_num = (*ep) ? atoi(ep) : 0;
+    }
+}
+
+static int dl_entry_cmp(const void *a, const void *b)
+{
+    const dl_entry_t *ea = (const dl_entry_t *)a;
+    const dl_entry_t *eb = (const dl_entry_t *)b;
+    if (ea->dl_type != eb->dl_type) return ea->dl_type - eb->dl_type;
+    int sc = strcmp(ea->series, eb->series);
+    if (sc != 0) return sc;
+    if (ea->season_num != eb->season_num) return ea->season_num - eb->season_num;
+    return ea->ep_num - eb->ep_num;
+}
+
+static void dl_manager_scan(void)
+{
+    s_dl_count = 0;
+    DIR *d = opendir(CACHE_DIR);
+    if (!d) return;
+
+    struct dirent *de;
+    while ((de = readdir(d)) != NULL && s_dl_count < MAX_DL_ENTRIES) {
+        const char *n = de->d_name;
+        int nlen = (int)strlen(n);
+
+        /* Skip hidden, .part files, and .txt companion files */
+        if (n[0] == '.') continue;
+        if (nlen > 5 && strcmp(n + nlen - 5, ".part") == 0) continue;
+        if (nlen > 4 && strcmp(n + nlen - 4, ".txt")  == 0) continue;
+
+        /* Detect type by extension: ITEMID.ts / .cbz / .mp3 */
+        bool is_vid   = (nlen > 3 && strcmp(n + nlen - 3, ".ts")  == 0);
+        bool is_cbz   = (nlen > 4 && strcmp(n + nlen - 4, ".cbz") == 0);
+        bool is_audio = (nlen > 4 && strcmp(n + nlen - 4, ".mp3") == 0);
+        if (!is_vid && !is_cbz && !is_audio) continue;
+
+        dl_entry_t *e = &s_dl_entries[s_dl_count++];
+        e->is_video = is_vid;
+        e->dl_type  = is_vid ? 0 : (is_cbz ? 1 : 2);
+
+        snprintf(e->path, sizeof(e->path), "%s/%s", CACHE_DIR, n);
+
+        /* Strip extension to get item_id */
+        int ext_len = is_vid ? 3 : 4;
+        int id_len  = nlen - ext_len;
+        if (id_len > 0 && id_len < (int)sizeof(e->item_id)) {
+            memcpy(e->item_id, n, (size_t)id_len);
+            e->item_id[id_len] = '\0';
+        } else {
+            e->item_id[0] = '\0';
+        }
+
+        struct stat st;
+        e->sz = (stat(e->path, &st) == 0) ? (size_t)st.st_size : 0;
+
+        /* Try companion .txt: CACHE_DIR/ITEMID.txt */
+        char txt[208];
+        snprintf(txt, sizeof(txt), "%s/%s.txt", CACHE_DIR, e->item_id);
+        FILE *f = fopen(txt, "r");
+        if (f) {
+            if (fgets(e->name, sizeof(e->name), f)) {
+                int l = (int)strlen(e->name);
+                while (l > 0 && (e->name[l-1] == '\n' || e->name[l-1] == '\r'))
+                    e->name[--l] = '\0';
+            }
+            fclose(f);
+        } else {
+            snprintf(e->name, sizeof(e->name), "%s", e->item_id);
+        }
+
+        dl_parse_metadata(e);
+    }
+    closedir(d);
+
+    if (s_dl_count > 1)
+        qsort(s_dl_entries, s_dl_count, sizeof(dl_entry_t), dl_entry_cmp);
+}
+
+static void dl_manager_delete(int idx)
+{
+    if (idx < 0 || idx >= s_dl_count) return;
+    dl_entry_t *e = &s_dl_entries[idx];
+    /* Remove file via cache (also removes from in-memory index) */
+    const char *ext = e->is_video ? "ts" : (e->dl_type == 1 ? "cbz" : "mp3");
+    if (e->item_id[0])
+        cache_remove(e->item_id, ext);
+    else
+        remove(e->path);
+    /* Remove companion .txt */
+    char txt[208];
+    snprintf(txt, sizeof(txt), "%s/%s.txt", CACHE_DIR, e->item_id);
+    remove(txt);
+}
+
+static int dl_manager_count(void) { return s_dl_count; }
+
+static const dl_entry_t *dl_manager_get(int idx)
+{
+    if (idx < 0 || idx >= s_dl_count) return NULL;
+    return &s_dl_entries[idx];
 }
 
 static void draw_text(float x, float y, float size, u32 color, const char *text)
@@ -78,243 +250,6 @@ static vp_3d_mode_t item_3d_mode(const jfin_item_t *item)
     }
 }
 
-/* ── Playback / offline-cache helpers ──────────────────────────────── */
-
-static bool item_is_video(const jfin_item_t *item)
-{
-    return item->type == JFIN_ITEM_MOVIE || item->type == JFIN_ITEM_EPISODE;
-}
-
-static bool item_is_playable(const jfin_item_t *item)
-{
-    return item->type == JFIN_ITEM_AUDIO || item_is_video(item);
-}
-
-static const char *item_cache_ext(const jfin_item_t *item)
-{
-    return item_is_video(item) ? "ts" : "mp3";
-}
-
-/* Cache size shown in settings — refreshed on entry/clear, never per-frame
- * (cache_total_bytes walks the SD directory) */
-static u64 s_cache_bytes_ui;
-
-/**
- * Start playback of a playable item, preferring the offline cache.
- * Covers: video with audio-stream fallback, audio/Old-3DS path, playback
- * reporting, album art, and now-playing state. View transitions stay at
- * the call sites (browse switches to now-playing; auto-advance doesn't).
- */
-static bool ui_start_item(ui_state_t *state, const jfin_session_t *session,
-                          const jfin_item_t *item, int item_index,
-                          int64_t start_ticks)
-{
-    jfin_stream_t stream;
-    char cpath[512];
-    bool started = false;
-
-    if (item_is_video(item) && video_player_is_supported()) {
-        vp_3d_mode_t mode_3d = item_3d_mode(item);
-        audio_player_stop();
-        if (cache_has(item->id, "ts") &&
-            cache_path(item->id, "ts", cpath, sizeof(cpath))) {
-            /* Local files seek in-place, so start_ticks passes through */
-            started = video_player_play(cpath, item->runtime_ticks,
-                                        start_ticks, mode_3d);
-        } else if (jfin_get_video_stream(session, item->id, start_ticks,
-                                         mode_3d != VP_3D_NONE, &stream)) {
-            started = video_player_play(stream.url, item->runtime_ticks,
-                                        start_ticks, mode_3d);
-        }
-    }
-
-    if (!started) {
-        /* Audio track, Old 3DS, or the video path failed.
-         * Cached audio can't seek locally (mpg123 feed API), so a
-         * non-zero start position falls back to streaming. */
-        video_player_stop();
-        if (start_ticks == 0 && cache_has(item->id, "mp3") &&
-            cache_path(item->id, "mp3", cpath, sizeof(cpath))) {
-            started = audio_player_play(cpath, item->runtime_ticks, 0);
-        } else if (jfin_get_audio_stream(session, item->id, start_ticks, &stream)) {
-            started = audio_player_play(stream.url, item->runtime_ticks,
-                                        start_ticks);
-        }
-    }
-
-    if (started) {
-        state->now_playing = *item;
-        state->has_now_playing = true;
-        state->playing_index = item_index;
-        state->auto_stopped = false;
-        jfin_report_start(session, item->id);
-        album_art_load(session, item);
-    }
-    return started;
-}
-
-/* ── Modal download (blocking, B cancels) ──────────────────────────── */
-
-typedef struct {
-    FILE              *fp;
-    const jfin_item_t *item;
-    int64_t            est_total;  /* runtime x bitrate estimate (bytes) */
-    u64                last_render_ms;
-    bool               cancelled;
-} dl_ctx_t;
-
-static size_t dl_file_write_cb(void *ptr, size_t size, size_t nmemb, void *ud)
-{
-    dl_ctx_t *dl = (dl_ctx_t *)ud;
-    return fwrite(ptr, size, nmemb, dl->fp);
-}
-
-static void dl_render_progress(dl_ctx_t *dl, s64 dlnow)
-{
-    C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
-    C2D_TextBufClear(s_text_buf);
-    C2D_TargetClear(s_bottom, rgba(COLOR_BG_DARK));
-    C2D_SceneBegin(s_bottom);
-    draw_text(10, 10, 0.6f, rgba(COLOR_PRIMARY), "Downloading");
-    draw_text(10, 40, 0.5f, rgba(COLOR_TEXT_PRIMARY), dl->item->name);
-
-    char line[96];
-    double mb = (double)dlnow / (1024.0 * 1024.0);
-    if (dl->est_total > 0) {
-        int pct = (int)((double)dlnow * 100.0 / (double)dl->est_total);
-        if (pct > 99) pct = 99; /* size is an estimate — never claim done */
-        draw_rect(20, 80, 280, 8, rgba(COLOR_BG_CARD));
-        draw_rect(20, 80, 280.0f * pct / 100.0f, 8, rgba(COLOR_PRIMARY));
-        snprintf(line, sizeof(line), "%.1f MB  (~%d%%)", mb, pct);
-    } else {
-        snprintf(line, sizeof(line), "%.1f MB", mb);
-    }
-    draw_text(20, 100, 0.5f, rgba(COLOR_VALUE), line);
-    draw_text(10, 140, 0.4f, rgba(COLOR_TEXT_SECONDARY),
-              "Keep the lid open — closing it drops WiFi.");
-    draw_text(10, 210, 0.45f, rgba(COLOR_TEXT_SECONDARY), "B: cancel");
-    C3D_FrameEnd(0);
-}
-
-static int dl_progress_cb(void *ud, curl_off_t dltotal, curl_off_t dlnow,
-                          curl_off_t ultotal, curl_off_t ulnow)
-{
-    (void)dltotal; (void)ultotal; (void)ulnow;
-    dl_ctx_t *dl = (dl_ctx_t *)ud;
-
-    hidScanInput();
-    if (hidKeysDown() & KEY_B) {
-        dl->cancelled = true;
-        return 1; /* abort the transfer */
-    }
-
-    u64 now = osGetTime();
-    if (now - dl->last_render_ms >= 250) {
-        dl->last_render_ms = now;
-        dl_render_progress(dl, (s64)dlnow);
-    }
-    return 0;
-}
-
-static void ui_download_item(const jfin_session_t *session,
-                             const jfin_item_t *item)
-{
-    const char *ext = item_cache_ext(item);
-
-    /* If the index is full, a completed download would be renamed on disk
-     * but never registered, so cache_has() stays false and the next X-press
-     * would delete the good file. Refuse up front with a visible message. */
-    if (cache_is_full()) {
-        C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
-        C2D_TextBufClear(s_text_buf);
-        C2D_TargetClear(s_bottom, rgba(COLOR_BG_DARK));
-        C2D_SceneBegin(s_bottom);
-        draw_text(10, 90, 0.5f, rgba(COLOR_TEXT_PRIMARY),
-                  "Offline cache full.");
-        draw_text(10, 120, 0.45f, rgba(COLOR_TEXT_SECONDARY),
-                  "Clear some downloads in Settings.");
-        C3D_FrameEnd(0);
-        svcSleepThread(1500000000LL); /* 1.5s so the message is readable */
-        return;
-    }
-
-    jfin_stream_t stream;
-    bool ok_url;
-    if (item_is_video(item)) {
-        vp_3d_mode_t mode_3d = item_3d_mode(item);
-        ok_url = jfin_get_video_stream(session, item->id, 0,
-                                       mode_3d != VP_3D_NONE, &stream);
-    } else {
-        ok_url = jfin_get_audio_stream(session, item->id, 0, &stream);
-    }
-    if (!ok_url) return;
-
-    char part[512], final_path[512];
-    if (!cache_part_path(item->id, ext, part, sizeof(part)) ||
-        !cache_path(item->id, ext, final_path, sizeof(final_path)))
-        return;
-
-    dl_ctx_t dl = {0};
-    dl.item = item;
-    dl.fp = fopen(part, "wb");
-    if (!dl.fp) {
-        log_write("DL: fopen failed: %s", part);
-        return;
-    }
-
-    /* Transcoded streams carry no Content-Length; estimate from
-     * runtime x configured bitrate for the progress bar */
-    int kbps = item_is_video(item)
-        ? g_config.video_bitrate + g_config.audio_bitrate
-        : g_config.audio_bitrate;
-    if (item->runtime_ticks > 0 && kbps > 0)
-        dl.est_total = item->runtime_ticks / 10000000LL * kbps * 1000 / 8;
-
-    dl_render_progress(&dl, 0);
-
-    CURL *curl = curl_easy_init();
-    if (!curl) {
-        fclose(dl.fp);
-        remove(part);
-        return;
-    }
-    curl_easy_setopt(curl, CURLOPT_URL, stream.url);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, dl_file_write_cb);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &dl);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "Jellyfin-3DS/" JFIN_VERSION);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L);
-    /* Server-side transcode throttling can slow the stream to ~realtime;
-     * only abort if it stalls outright for a minute */
-    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
-    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L);
-    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
-    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, dl_progress_cb);
-    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &dl);
-
-    CURLcode res = curl_easy_perform(curl);
-    long http_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    curl_easy_cleanup(curl);
-    fclose(dl.fp);
-
-    if (res == CURLE_OK && http_code >= 200 && http_code < 300) {
-        remove(final_path); /* replace an older copy if re-downloading */
-        if (rename(part, final_path) == 0) {
-            cache_index_add(item->id, ext);
-            log_write("DL: cached %s.%s", item->id, ext);
-        } else {
-            log_write("DL: rename failed for %s", part);
-            remove(part);
-        }
-    } else {
-        remove(part);
-        log_write("DL: %s res=%d http=%ld",
-                  dl.cancelled ? "cancelled" : "failed", res, http_code);
-    }
-}
-
 /* ── Selection style helper ────────────────────────────────────────── */
 
 static void draw_list_item_bg(float y, float w, float h, bool selected)
@@ -328,17 +263,18 @@ static void draw_list_item_bg(float y, float w, float h, bool selected)
 /* ── Settings items ───────────────────────────────────────────────── */
 
 enum {
+    SET_DOWNLOADS,              /* action: open downloads manager — pinned first */
     SET_AUDIO_BITRATE,
     SET_VIDEO_BITRATE,
     SET_AUTO_ADVANCE,
-    SET_CACHE_CLEAR,         /* action: clear offline cache */
-    SET_SEPARATOR_ACCOUNT,   /* non-selectable divider */
-    SET_SERVER,              /* display-only */
-    SET_USERNAME,            /* display-only */
-    SET_LOGOUT,              /* action */
-    SET_SEPARATOR_ABOUT,     /* non-selectable divider */
-    SET_VERSION,             /* display-only */
-    SET_DEVICE_ID,           /* display-only */
+    SET_BG_THEME,
+    SET_SEPARATOR_ACCOUNT,      /* non-selectable divider */
+    SET_SERVER,                 /* display-only */
+    SET_USERNAME,               /* display-only */
+    SET_LOGOUT,                 /* action */
+    SET_SEPARATOR_ABOUT,        /* non-selectable divider */
+    SET_VERSION,                /* display-only */
+    SET_DEVICE_ID,              /* display-only */
     SET_COUNT
 };
 
@@ -349,7 +285,8 @@ static const int video_rates[] = {256, 472, 768};
 
 static bool settings_is_separator(int idx)
 {
-    return idx == SET_SEPARATOR_ACCOUNT || idx == SET_SEPARATOR_ABOUT;
+    return idx == SET_SEPARATOR_ACCOUNT ||
+           idx == SET_SEPARATOR_ABOUT;
 }
 
 static int settings_next_selectable(int from, int dir)
@@ -359,6 +296,25 @@ static int settings_next_selectable(int from, int dir)
         n += dir;
     if (n < 0 || n >= SET_COUNT) return from;
     return n;
+}
+
+/* ── Subtitle helpers ──────────────────────────────────────────────── */
+
+static void apply_sticky_subtitle(ui_state_t *state, const jfin_session_t *session,
+                                  const char *item_id)
+{
+    state->subtitle_stream_index = -1;
+    state->subtitle_list_loaded = false;
+    if (!state->subtitle_sticky || state->subtitle_lang_pref[0] == '\0') return;
+    if (!jfin_get_subtitle_streams(session, item_id, &state->subtitle_list)) return;
+    state->subtitle_list_loaded = true;
+    for (int i = 0; i < state->subtitle_list.count; i++) {
+        if (strcmp(state->subtitle_list.subs[i].language,
+                   state->subtitle_lang_pref) == 0) {
+            state->subtitle_stream_index = state->subtitle_list.subs[i].index;
+            return;
+        }
+    }
 }
 
 /* ── Lifecycle ─────────────────────────────────────────────────────── */
@@ -377,11 +333,13 @@ bool ui_init(void)
     /* Use system font */
     s_font = NULL; /* NULL = default system font */
 
+    srand((unsigned int)svcGetSystemTick());
     return true;
 }
 
 void ui_cleanup(void)
 {
+    dl_cleanup();
     if (s_text_buf) {
         C2D_TextBufDelete(s_text_buf);
         s_text_buf = NULL;
@@ -393,7 +351,8 @@ void ui_cleanup(void)
 void ui_update(ui_state_t *state, const jfin_session_t *session,
                u32 kdown, u32 kheld, touchPosition touch)
 {
-    (void)kheld;
+    /* Advance download queue every frame regardless of active view */
+    dl_process_queue();
 
     switch (state->current_view) {
     case VIEW_LOGIN:
@@ -439,12 +398,12 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 }
             }
         }
-        /* START to attempt login */
+        /* R: attempt login */
         if (kdown & KEY_R) {
             /* Show connecting indicator before blocking login call */
             C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
             C2D_TextBufClear(s_text_buf);
-            C2D_TargetClear(s_bottom, rgba(COLOR_BG_DARK));
+            C2D_TargetClear(s_bottom, bg_color());
             C2D_SceneBegin(s_bottom);
             draw_text(100, 110, 0.6f, rgba(COLOR_PRIMARY), "Connecting...");
             C3D_FrameEnd(0);
@@ -463,6 +422,13 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 state->selected_index = 0;
                 state->scroll_offset = 0;
             }
+        }
+        /* SELECT: open settings without logging in (offline/downloads access) */
+        if (kdown & KEY_SELECT) {
+            state->previous_view = VIEW_LOGIN;
+            state->settings_index = 0;
+            state->settings_scroll = 0;
+            state->current_view = VIEW_SETTINGS;
         }
         break;
 
@@ -580,14 +546,86 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                                      item->type == JFIN_ITEM_MUSIC_ARTIST ||
                                      item->type == JFIN_ITEM_SERIES ||
                                      item->type == JFIN_ITEM_SEASON);
+                bool is_video = (item->type == JFIN_ITEM_MOVIE ||
+                                 item->type == JFIN_ITEM_EPISODE);
                 if (is_playable) {
-                    if (ui_start_item(state, session, item,
-                                      state->selected_index, 0)) {
-                        state->previous_view = state->current_view;
-                        state->current_view = VIEW_NOW_PLAYING;
+                    if (is_video && video_player_is_supported()) {
+                        /* Video playback on New 3DS */
+                        vp_3d_mode_t mode_3d = item_3d_mode(item);
+                        audio_player_stop();
+                        apply_sticky_subtitle(state, session, item->id);
+                        jfin_stream_t stream;
+                        state->video_retry_count = 0;
+                        state->video_retry_timer = 0;
+                        if (jfin_get_video_stream(session, item->id, 0,
+                                                  mode_3d != VP_3D_NONE,
+                                                  state->subtitle_stream_index,
+                                                  &stream) &&
+                            video_player_play(stream.url, item->runtime_ticks, 0, mode_3d)) {
+                            state->now_playing_offline = false;
+                            state->now_playing_local_path[0] = '\0';
+                            state->now_playing = *item;
+                            state->has_now_playing = true;
+                            state->playing_index = state->selected_index;
+                            state->auto_stopped = false;
+                            state->previous_view = state->current_view;
+                            state->current_view = VIEW_NOW_PLAYING;
+                            jfin_report_start(session, item->id);
+                                album_art_load(session, item);
+                        } else {
+                            /* Video failed — fall back to audio */
+                            if (jfin_get_audio_stream(session, item->id, 0, &stream)) {
+                                audio_player_play(stream.url, item->runtime_ticks, 0);
+                                state->now_playing = *item;
+                                state->has_now_playing = true;
+                                state->playing_index = state->selected_index;
+                                state->auto_stopped = false;
+                                jfin_report_start(session, item->id);
+                                album_art_load(session, item);
+                            }
+                        }
+                    } else {
+                        /* Audio-only (music, or video on Old 3DS) */
+                        video_player_stop(); /* stop any video playback */
+                        jfin_stream_t stream;
+                        if (jfin_get_audio_stream(session, item->id, 0, &stream)) {
+                            audio_player_play(stream.url, item->runtime_ticks, 0);
+                            state->now_playing = *item;
+                            state->has_now_playing = true;
+                            state->playing_index = state->selected_index;
+                            state->auto_stopped = false;
+                            state->previous_view = state->current_view;
+                            state->current_view = VIEW_NOW_PLAYING;
+                            jfin_report_start(session, item->id);
+                            album_art_load(session, item);
+                        }
                     }
                 } else if (is_container) {
                     ui_navigate_into(state, session, item);
+                } else if (item->type == JFIN_ITEM_BOOK) {
+                    state->now_playing      = *item;
+                    state->reader_page      = 0;
+                    state->reader_load_page = false;
+                    state->reader_rotated   = false;
+                    state->reader_split     = false;
+                    state->reader_zoom      = 1.0f;
+                    state->reader_pan_x     = 0.0f;
+                    state->reader_pan_y     = 0.0f;
+                    state->previous_view    = state->current_view;
+                    state->current_view     = VIEW_READER;
+                    /* Save companion .txt so downloads manager shows a readable name */
+                    {
+                        char cbz_meta[192];
+                        cache_path(item->id, "txt", cbz_meta, sizeof(cbz_meta));
+                        FILE *mf = fopen(cbz_meta, "w");
+                        if (mf) {
+                            for (int _d = 1; _d < state->parent_depth; _d++)
+                                fprintf(mf, "%s / ", state->parent_stack_names[_d]);
+                            fprintf(mf, "%s", item->name);
+                            fclose(mf);
+                        }
+                    }
+                    reader_open_book(session, item->id);
                 }
                 /* JFIN_ITEM_UNKNOWN: do nothing */
             }
@@ -595,20 +633,6 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
         /* B to go back */
         if (kdown & KEY_B) {
             ui_navigate_back(state, session);
-        }
-        /* X: download to / remove from the offline cache */
-        if ((kdown & KEY_X) && state->selected_index < state->items.count) {
-            jfin_item_t *item = &state->items.items[state->selected_index];
-            /* Video on Old 3DS can't be played, so don't cache it either */
-            bool cacheable = item_is_playable(item) &&
-                             (!item_is_video(item) || video_player_is_supported());
-            if (cacheable) {
-                const char *ext = item_cache_ext(item);
-                if (cache_has(item->id, ext))
-                    cache_remove(item->id, ext);
-                else
-                    ui_download_item(session, item);
-            }
         }
         /* L/R for pagination */
         if (kdown & KEY_R) {
@@ -640,6 +664,125 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 }
             }
         }
+        /* X: download video/book/audio. ZL+X: download video with first available subtitle. */
+        if (kdown & KEY_X) {
+            if (state->selected_index < state->items.count) {
+                jfin_item_t *item = &state->items.items[state->selected_index];
+                bool is_video = (item->type == JFIN_ITEM_MOVIE ||
+                                 item->type == JFIN_ITEM_EPISODE);
+                bool is_book  = (item->type == JFIN_ITEM_BOOK);
+                bool is_audio = (item->type == JFIN_ITEM_AUDIO);
+                bool is_album = (item->type == JFIN_ITEM_MUSIC_ALBUM);
+                if (is_video) {
+                    jfin_stream_t stream;
+                    bool want_first_sub = (kheld & KEY_ZL) != 0;
+                    int dl_sub_idx;
+                    char dl_sub_lang[8] = "";
+
+                    if (want_first_sub) {
+                        /* ZL+X: fetch first available subtitle and burn it in */
+                        if (state->subtitle_list_loaded && state->subtitle_list.count > 0) {
+                            dl_sub_idx = state->subtitle_list.subs[0].index;
+                            snprintf(dl_sub_lang, sizeof(dl_sub_lang), "%s",
+                                     state->subtitle_list.subs[0].language);
+                        } else {
+                            jfin_subtitle_list_t tmp_subs;
+                            if (jfin_get_subtitle_streams(session, item->id, &tmp_subs)
+                                && tmp_subs.count > 0) {
+                                dl_sub_idx = tmp_subs.subs[0].index;
+                                snprintf(dl_sub_lang, sizeof(dl_sub_lang), "%s",
+                                         tmp_subs.subs[0].language);
+                            } else {
+                                dl_sub_idx = -1;
+                            }
+                        }
+                    } else {
+                        /* Plain X: use currently active subtitle (may be -1 = none) */
+                        dl_sub_idx = state->subtitle_stream_index;
+                        if (state->subtitle_stream_index >= 0 && state->subtitle_list_loaded) {
+                            for (int si = 0; si < state->subtitle_list.count; si++) {
+                                if (state->subtitle_list.subs[si].index == state->subtitle_stream_index) {
+                                    snprintf(dl_sub_lang, sizeof(dl_sub_lang), "%s",
+                                             state->subtitle_list.subs[si].language);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    /* Build breadcrumb display name: "Series / Season / E## - Title" */
+                    char dl_name[256];
+                    if (item->type == JFIN_ITEM_EPISODE) {
+                        char series_part[80] = "";
+                        if (item->series_name[0])
+                            snprintf(series_part, sizeof(series_part), "%s / ", item->series_name);
+                        else if (state->parent_depth >= 2)
+                            snprintf(series_part, sizeof(series_part), "%s / ",
+                                     state->parent_stack_names[state->parent_depth - 2]);
+                        char season_part[64] = "";
+                        if (state->parent_depth >= 1)
+                            snprintf(season_part, sizeof(season_part), "%s / ",
+                                     state->parent_stack_names[state->parent_depth - 1]);
+                        if (item->index_number > 0)
+                            snprintf(dl_name, sizeof(dl_name), "%s%sE%02d - %s",
+                                     series_part, season_part, item->index_number, item->name);
+                        else
+                            snprintf(dl_name, sizeof(dl_name), "%s%s%s",
+                                     series_part, season_part, item->name);
+                    } else {
+                        snprintf(dl_name, sizeof(dl_name), "%s", item->name);
+                    }
+                    if (jfin_get_video_stream(session, item->id, 0, false, dl_sub_idx, &stream))
+                        dl_queue_video(item->id, dl_name, stream.url, dl_sub_lang,
+                                       item->runtime_ticks);
+                } else if (is_book) {
+                    /* Build breadcrumb display name for the book */
+                    char book_name[256];
+                    book_name[0] = '\0';
+                    for (int _d = 1; _d < state->parent_depth; _d++) {
+                        strncat(book_name, state->parent_stack_names[_d],
+                                sizeof(book_name) - strlen(book_name) - 1);
+                        strncat(book_name, " / ",
+                                sizeof(book_name) - strlen(book_name) - 1);
+                    }
+                    strncat(book_name, item->name, sizeof(book_name) - strlen(book_name) - 1);
+                    /* Build download URL with api_key */
+                    char dl_url[JFIN_URL_BUF];
+                    snprintf(dl_url, sizeof(dl_url), "%s/Items/%s/Download?api_key=%s",
+                             session->server_url, item->id, session->access_token);
+                    dl_queue_book(item->id, book_name, dl_url);
+                } else if (is_audio) {
+                    /* Download single audio track as MP3 */
+                    jfin_stream_t aud_stream;
+                    if (jfin_get_audio_stream(session, item->id, 0, &aud_stream)) {
+                        char dl_name[256];
+                        if (item->artist[0] && item->album[0])
+                            snprintf(dl_name, sizeof(dl_name), "%s / %s / %s",
+                                     item->artist, item->album, item->name);
+                        else
+                            snprintf(dl_name, sizeof(dl_name), "%s", item->name);
+                        dl_queue_audio(item->id, dl_name, aud_stream.url);
+                    }
+                } else if (is_album) {
+                    /* Download all tracks in album (static: ~23KB, too large for stack) */
+                    static jfin_item_list_t album_tracks;
+                    if (jfin_get_items(session, item->id, 0, JFIN_MAX_ITEMS, &album_tracks)) {
+                        const char *album_artist = item->artist[0] ? item->artist : item->name;
+                        for (int ai = 0; ai < album_tracks.count; ai++) {
+                            jfin_item_t *track = &album_tracks.items[ai];
+                            if (track->type != JFIN_ITEM_AUDIO) continue;
+                            jfin_stream_t aud_stream;
+                            if (jfin_get_audio_stream(session, track->id, 0, &aud_stream)) {
+                                char dl_name[256];
+                                snprintf(dl_name, sizeof(dl_name), "%s / %s / %s",
+                                         album_artist, item->name, track->name);
+                                dl_queue_audio(track->id, dl_name, aud_stream.url);
+                            }
+                        }
+                    }
+                }
+            }
+        }
         /* Y to toggle now-playing view */
         if ((kdown & KEY_Y) && state->has_now_playing) {
             state->previous_view = state->current_view;
@@ -648,9 +791,9 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
         /* SELECT: settings in libraries, search in browse */
         if (kdown & KEY_SELECT) {
             if (state->current_view == VIEW_LIBRARIES) {
+                state->previous_view = VIEW_LIBRARIES;
                 state->settings_index = 0;
                 state->settings_scroll = 0;
-                s_cache_bytes_ui = cache_total_bytes(); /* one dir walk on entry */
                 state->current_view = VIEW_SETTINGS;
             } else {
                 SwkbdState swkbd;
@@ -674,12 +817,68 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             bool video_finished = (vs.state == VIDEO_STOPPED && ps.state == PLAYER_STOPPED);
 
             if (audio_finished || video_finished) {
-                int next = state->playing_index + 1;
-                if (next < state->items.count &&
-                    item_is_playable(&state->items.items[next])) {
-                    if (!ui_start_item(state, session,
-                                       &state->items.items[next], next, 0))
+                int next;
+                if (state->repeat_mode == 1) {
+                    /* Repeat-one: replay the same track */
+                    next = state->playing_index;
+                } else if (state->shuffle_mode && state->items.count > 1) {
+                    /* Shuffle: pick a random track that's different from current */
+                    do {
+                        next = rand() % state->items.count;
+                    } while (next == state->playing_index);
+                } else {
+                    next = state->playing_index + 1;
+                    /* Repeat-all: wrap around */
+                    if (state->repeat_mode == 2 && next >= state->items.count)
+                        next = 0;
+                }
+                if (next < state->items.count) {
+                    jfin_item_t *next_item = &state->items.items[next];
+                    /* Only auto-advance to same playable type */
+                    bool next_playable = (next_item->type == JFIN_ITEM_AUDIO ||
+                                          next_item->type == JFIN_ITEM_MOVIE ||
+                                          next_item->type == JFIN_ITEM_EPISODE);
+                    bool next_is_video = (next_item->type == JFIN_ITEM_MOVIE ||
+                                          next_item->type == JFIN_ITEM_EPISODE);
+                    if (next_playable) {
+                        vp_3d_mode_t next_mode = item_3d_mode(next_item);
+                        jfin_stream_t stream;
+                        bool started = false;
+                        apply_sticky_subtitle(state, session, next_item->id);
+                        if (next_is_video && video_player_is_supported()) {
+                            state->video_retry_count = 0;
+                            state->video_retry_timer = 0;
+                            if (jfin_get_video_stream(session, next_item->id, 0,
+                                                      next_mode != VP_3D_NONE,
+                                                      state->subtitle_stream_index,
+                                                      &stream) &&
+                                video_player_play(stream.url, next_item->runtime_ticks, 0, next_mode)) {
+                                started = true;
+                            } else if (jfin_get_audio_stream(session, next_item->id, 0, &stream)) {
+                                audio_player_play(stream.url, next_item->runtime_ticks, 0);
+                                started = true;
+                            }
+                        } else {
+                            if (jfin_get_audio_stream(session, next_item->id, 0, &stream)) {
+                                audio_player_play(stream.url, next_item->runtime_ticks, 0);
+                                started = true;
+                            }
+                        }
+                        if (started) {
+                            state->now_playing = *next_item;
+                            state->playing_index = next;
+                            state->auto_stopped = false;
+                            /* Clear offline flags so X/seek handlers use the fast online path */
+                            state->now_playing_offline = false;
+                            state->now_playing_local_path[0] = '\0';
+                            jfin_report_start(session, next_item->id);
+                            album_art_load(session, next_item);
+                        } else {
+                            state->has_now_playing = false;
+                        }
+                    } else {
                         state->has_now_playing = false;
+                    }
                 } else {
                     state->has_now_playing = false;
                 }
@@ -693,13 +892,63 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             bool vid_active = (vs.state == VIDEO_PLAYING || vs.state == VIDEO_PAUSED ||
                                vs.state == VIDEO_LOADING);
 
-            /* Error state: any button press stops and returns to browse */
+            /* Error state */
             if (vs.state == VIDEO_ERROR) {
                 if (kdown) {
+                    state->video_retry_count = 0;
+                    state->video_retry_timer = 0;
                     video_player_stop();
                     audio_player_stop();
                     state->has_now_playing = false;
                     state->current_view = state->previous_view;
+                    break;
+                }
+                /* Subtitle seeks need longer retries — server-side retranscode can take >10s */
+                int max_retries    = (state->subtitle_stream_index >= 0) ? 5 : 3;
+                int retry_interval = (state->subtitle_stream_index >= 0) ? 300 : 180;
+                if (!state->now_playing_offline
+                    && strncmp(vs.error_msg, "Video not ready", 15) == 0
+                    && state->video_retry_count < max_retries) {
+                    if (state->video_retry_timer == 0) {
+                        state->video_retry_timer = retry_interval;
+                    } else {
+                        state->video_retry_timer--;
+                        if (state->video_retry_timer == 0) {
+                            state->video_retry_count++;
+                            vp_3d_mode_t retry_mode = item_3d_mode(&state->now_playing);
+                            jfin_stream_t retry_stream;
+                            if (jfin_get_video_stream(session, state->now_playing.id,
+                                                      state->video_retry_ticks,
+                                                      retry_mode != VP_3D_NONE,
+                                                      state->subtitle_stream_index,
+                                                      &retry_stream))
+                                video_player_play(retry_stream.url,
+                                                  state->now_playing.runtime_ticks,
+                                                  state->video_retry_ticks,
+                                                  retry_mode);
+                        }
+                    }
+                } else if (!state->now_playing_offline
+                           && strncmp(vs.error_msg, "Video not ready", 15) == 0
+                           && state->video_retry_count >= max_retries
+                           && state->subtitle_stream_index >= 0) {
+                    /* Subtitle transcode timed out — fall back to no-subtitle at same position */
+                    state->subtitle_stream_index = -1;
+                    state->subtitle_sticky = false;
+                    state->subtitle_lang_pref[0] = '\0';
+                    state->video_retry_count = 0;
+                    state->video_retry_timer = 0;
+                    vp_3d_mode_t fb_mode = item_3d_mode(&state->now_playing);
+                    jfin_stream_t fb_stream;
+                    if (jfin_get_video_stream(session, state->now_playing.id,
+                                              state->video_retry_ticks,
+                                              fb_mode != VP_3D_NONE,
+                                              -1,
+                                              &fb_stream))
+                        video_player_play(fb_stream.url,
+                                          state->now_playing.runtime_ticks,
+                                          state->video_retry_ticks,
+                                          fb_mode);
                 }
                 break;
             }
@@ -722,36 +971,282 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 else
                     audio_player_pause();
             }
-            /* L/R to seek ±30 seconds */
+            /* For offline: only sync position when MVD is actually decoding frames.
+             * vs.state == VIDEO_PLAYING triggers even when MVD fails because AAC
+             * audio starts successfully. vs.position_ticks then races to end-of-file
+             * as the DEC thread consumes failed packets at SD-card speed.
+             * vs.frames_decoded only increments when mvdstdProcessVideoFrame succeeds,
+             * so it is zero for the entire duration of a failed seek session.
+             * Detect a new player session by checking if frames_decoded decreased. */
+            {
+                static int s_off_prev_decoded = 0;
+                if (state->now_playing_offline) {
+                    if (vs.frames_decoded < s_off_prev_decoded)
+                        s_off_prev_decoded = 0; /* new session started — counter reset */
+                    if (vs.frames_decoded > s_off_prev_decoded) {
+                        state->video_retry_ticks = vs.position_ticks;
+                        s_off_prev_decoded = vs.frames_decoded;
+                    }
+                } else {
+                    s_off_prev_decoded = 0;
+                }
+            }
+
+            /* L/R to seek (R: +30s, L: -15s) */
             if ((kdown & KEY_L) || (kdown & KEY_R)) {
-                int64_t offset = (kdown & KEY_R) ? 300000000LL : -300000000LL; /* ±30s */
+                int64_t offset = (kdown & KEY_R) ? 300000000LL : -150000000LL; /* R:+30s L:-15s */
                 int64_t cur_pos;
                 if (vid_active)
-                    cur_pos = vs.position_ticks;
+                    cur_pos = state->now_playing_offline
+                              ? state->video_retry_ticks   /* immune to DEC racing */
+                              : vs.position_ticks;
                 else
                     cur_pos = audio_player_get_status().position_ticks;
 
                 int64_t new_pos = cur_pos + offset;
                 if (new_pos < 0) new_pos = 0;
-                if (new_pos >= state->now_playing.runtime_ticks)
+                if (state->now_playing.runtime_ticks > 0 &&
+                    new_pos >= state->now_playing.runtime_ticks)
                     new_pos = state->now_playing.runtime_ticks - 100000000LL; /* 10s before end */
 
-                /* ui_start_item picks cache vs stream; cached video seeks
-                 * in-place on the SD file (no transcode restart) */
-                if (vid_active)
+                jfin_stream_t stream;
+                if (vid_active) {
                     video_player_stop();
-                else
-                    audio_player_stop();
-                ui_start_item(state, session, &state->now_playing,
-                              state->playing_index, new_pos);
+                    state->video_retry_count = 0;
+                    state->video_retry_timer = 0;
+                    if (state->now_playing_offline) {
+                        /* Seek by byte offset in local TS file (net_thread estimates position) */
+                        state->video_retry_ticks = new_pos;
+                        video_player_play(state->now_playing_local_path, 0, new_pos, VP_3D_NONE);
+                    } else {
+                        vp_3d_mode_t mode_3d = item_3d_mode(&state->now_playing);
+                        state->video_retry_ticks = new_pos;
+                        if (jfin_get_video_stream(session, state->now_playing.id, new_pos,
+                                                  mode_3d != VP_3D_NONE,
+                                                  state->subtitle_stream_index,
+                                                  &stream))
+                            video_player_play(stream.url, state->now_playing.runtime_ticks, new_pos, mode_3d);
+                    }
+                } else {
+                    /* Audio seek: only call Jellyfin for online streams.
+                     * For offline (local MP3), seeking is not yet supported. */
+                    if (!state->now_playing_offline) {
+                        audio_player_stop();
+                        if (jfin_get_audio_stream(session, state->now_playing.id, new_pos, &stream))
+                            audio_player_play(stream.url, state->now_playing.runtime_ticks, new_pos);
+                    }
+                }
             }
-            /* B to go back to browse */
+            /* Y (video online): cycle subtitle tracks */
+            if ((kdown & KEY_Y) && vid_active && !state->now_playing_offline) {
+                if (!state->subtitle_list_loaded) {
+                    if (jfin_get_subtitle_streams(session, state->now_playing.id,
+                                                  &state->subtitle_list))
+                        state->subtitle_list_loaded = true;
+                }
+                int next_index = -1;
+                if (state->subtitle_stream_index < 0) {
+                    if (state->subtitle_list_loaded && state->subtitle_list.count > 0)
+                        next_index = state->subtitle_list.subs[0].index;
+                } else {
+                    int cur_pos = -1;
+                    for (int si = 0; si < state->subtitle_list.count; si++) {
+                        if (state->subtitle_list.subs[si].index == state->subtitle_stream_index) {
+                            cur_pos = si; break;
+                        }
+                    }
+                    if (cur_pos < 0 || cur_pos >= state->subtitle_list.count - 1)
+                        next_index = -1;
+                    else
+                        next_index = state->subtitle_list.subs[cur_pos + 1].index;
+                }
+                state->subtitle_stream_index = next_index;
+                if (next_index >= 0) {
+                    state->subtitle_sticky = true;
+                    for (int si = 0; si < state->subtitle_list.count; si++) {
+                        if (state->subtitle_list.subs[si].index == next_index) {
+                            snprintf(state->subtitle_lang_pref,
+                                     sizeof(state->subtitle_lang_pref),
+                                     "%s", state->subtitle_list.subs[si].language);
+                            break;
+                        }
+                    }
+                } else {
+                    state->subtitle_sticky = false;
+                    state->subtitle_lang_pref[0] = '\0';
+                }
+                int64_t resume_ticks = vs.position_ticks;
+                vp_3d_mode_t sub_mode = item_3d_mode(&state->now_playing);
+                video_player_stop();
+                state->video_retry_count = 0;
+                state->video_retry_timer = 0;
+                state->video_retry_ticks = resume_ticks;
+                jfin_stream_t sub_stream;
+                if (jfin_get_video_stream(session, state->now_playing.id, resume_ticks,
+                                          sub_mode != VP_3D_NONE,
+                                          state->subtitle_stream_index, &sub_stream))
+                    video_player_play(sub_stream.url, state->now_playing.runtime_ticks,
+                                      resume_ticks, sub_mode);
+            }
+            /* Y (audio): toggle shuffle */
+            if ((kdown & KEY_Y) && !vid_active)
+                state->shuffle_mode = !state->shuffle_mode;
+            /* SELECT: repeat mode 0→1→2 (audio only) */
+            if ((kdown & KEY_SELECT) && !vid_active)
+                state->repeat_mode = (state->repeat_mode + 1) % 3;
+            /* ZL/ZR (audio, New 3DS): previous / next track */
+            if (!vid_active && state->has_now_playing) {
+                int skip_dir = 0;
+                if (kdown & KEY_ZR) skip_dir = +1;
+                if (kdown & KEY_ZL) skip_dir = -1;
+                if (skip_dir != 0) {
+                    int target = state->playing_index + skip_dir;
+                    if (target >= 0 && target < state->items.count) {
+                        jfin_item_t *trk = &state->items.items[target];
+                        jfin_stream_t skip_stream;
+                        audio_player_stop();
+                        if (jfin_get_audio_stream(session, trk->id, 0, &skip_stream)) {
+                            audio_player_play(skip_stream.url, trk->runtime_ticks, 0);
+                            state->now_playing  = *trk;
+                            state->playing_index = target;
+                            state->auto_stopped  = false;
+                            jfin_report_start(session, trk->id);
+                            album_art_load(session, trk);
+                        }
+                    }
+                }
+            }
+            /* X / ZL+X (video): queue download of next undownloaded episode.
+             * ZL held = burn in current subtitle track (same as browse ZL+X). */
+            if ((kdown & KEY_X) && state->has_now_playing &&
+                    (vid_active || state->now_playing_local_path[0]) &&
+                    session->authenticated) {
+                bool with_subs = (kheld & KEY_ZL) != 0;
+                /* sub_idx: prefer current active track; -1 means "look up per-candidate" */
+                int  sub_idx   = with_subs ? state->subtitle_stream_index : -1;
+                const char *sub_name = (with_subs && state->subtitle_lang_pref[0])
+                                       ? state->subtitle_lang_pref : NULL;
+
+#define TRY_QUEUE_NEXT(list_ptr, _mc, start_i)                                \
+    do {                                                                       \
+        for (int _i = (start_i); _i < (_mc); _i++) {                          \
+            jfin_item_t *cand = &(list_ptr)[_i];                               \
+            if (cand->type != JFIN_ITEM_EPISODE &&                             \
+                cand->type != JFIN_ITEM_MOVIE) continue;                       \
+            bool already = cache_has(cand->id, "ts") ||                        \
+                           dl_queue_has_video(cand->id);                       \
+            if (already) continue;                                             \
+            /* When ZL+X but no sub currently active, look up subs for cand */\
+            int _eff_sub = sub_idx;                                            \
+            char _eff_lang[8] = {0};                                           \
+            const char *_eff_sub_name = sub_name;                              \
+            if (with_subs && _eff_sub < 0) {                                   \
+                jfin_subtitle_list_t _csl;                                      \
+                if (jfin_get_subtitle_streams(session, cand->id, &_csl) &&     \
+                        _csl.count > 0) {                                       \
+                    _eff_sub = _csl.subs[0].index;                             \
+                    strncpy(_eff_lang, _csl.subs[0].language, 7);              \
+                    _eff_sub_name = _eff_lang[0] ? _eff_lang : NULL;           \
+                    if (sub_name) {                                             \
+                        for (int _sli = 0; _sli < _csl.count; _sli++) {        \
+                            if (strcmp(_csl.subs[_sli].language, sub_name)==0) { \
+                                _eff_sub = _csl.subs[_sli].index;              \
+                                strncpy(_eff_lang, _csl.subs[_sli].language, 7);\
+                                _eff_sub_name = _eff_lang;                     \
+                                break;                                          \
+                            }                                                   \
+                        }                                                       \
+                    }                                                           \
+                }                                                               \
+            }                                                                   \
+            bool got_sub = with_subs && (_eff_sub >= 0);                       \
+            jfin_stream_t xstream;                                             \
+            vp_3d_mode_t xmode = item_3d_mode(cand);                          \
+            if (jfin_get_video_stream(session, cand->id, 0,                    \
+                                      xmode != VP_3D_NONE, _eff_sub, &xstream)) { \
+                char xname[256];                                               \
+                if (cand->series_name[0] && cand->season_number > 0)           \
+                    snprintf(xname, sizeof(xname), "%s / Season %d / E%02d - %s", \
+                             cand->series_name, cand->season_number,           \
+                             cand->index_number, cand->name);                  \
+                else if (cand->series_name[0])                                 \
+                    snprintf(xname, sizeof(xname), "%s / E%02d - %s",         \
+                             cand->series_name, cand->index_number, cand->name); \
+                else snprintf(xname, sizeof(xname), "%s", cand->name);        \
+                dl_queue_video(cand->id, xname, xstream.url, _eff_sub_name,   \
+                               cand->runtime_ticks);                           \
+                if (cand->index_number > 0)                                    \
+                    snprintf(state->np_toast, sizeof(state->np_toast),         \
+                             got_sub ? "DL+sub: E%02d - %s"                    \
+                                     : "DL: E%02d - %s",                       \
+                             cand->index_number, cand->name);                  \
+                else snprintf(state->np_toast, sizeof(state->np_toast),        \
+                              got_sub ? "DL+sub: %s" : "DL: %s", cand->name); \
+                state->np_toast_timer = 150;                                   \
+            }                                                                  \
+            break;                                                             \
+        }                                                                      \
+    } while (0)
+
+                if (!state->now_playing_offline && state->playing_index >= 0) {
+                    /* Online fast path: browse list already has the season */
+                    int _prev_toast = state->np_toast_timer;
+                    TRY_QUEUE_NEXT(state->items.items, state->items.count,
+                                   state->playing_index + 1);
+                    /* If nothing was queued and more pages exist on the server,
+                     * fetch the next page and continue searching from index 0.
+                     * np_toast_timer is set to 150 by TRY_QUEUE_NEXT on success. */
+                    if (state->np_toast_timer == _prev_toast &&
+                        state->items.total_count >
+                        state->items.start_index + state->items.count) {
+                        const char *_pg_pid = (state->parent_depth > 0)
+                            ? state->parent_stack_ids[state->parent_depth - 1] : NULL;
+                        if (_pg_pid) {
+                            static jfin_item_list_t s_x_overflow;
+                            int _pg_start = state->items.start_index + state->items.count;
+                            if (jfin_get_items(session, _pg_pid, _pg_start,
+                                               JFIN_MAX_ITEMS, &s_x_overflow))
+                                TRY_QUEUE_NEXT(s_x_overflow.items, s_x_overflow.count, 0);
+                        }
+                    }
+                } else {
+                    /* Offline path: resolve parent from server */
+                    char xparent[JFIN_MAX_ID] = {0};
+                    if (state->now_playing.parent_id[0])
+                        strncpy(xparent, state->now_playing.parent_id, sizeof(xparent)-1);
+                    else if (state->now_playing.id[0])
+                        jfin_get_item_parent_id(session, state->now_playing.id,
+                                                xparent, sizeof(xparent));
+                    if (xparent[0]) {
+                        static jfin_item_list_t s_sibs;
+                        if (jfin_get_siblings(session, xparent, JFIN_MAX_ITEMS, &s_sibs)) {
+                            int cur_pos = -1;
+                            for (int si = 0; si < s_sibs.count; si++) {
+                                if (strcmp(s_sibs.items[si].id,
+                                           state->now_playing.id) == 0)
+                                    { cur_pos = si; break; }
+                            }
+                            if (cur_pos < 0 && state->now_playing.index_number > 0) {
+                                for (int si = 0; si < s_sibs.count; si++) {
+                                    if (s_sibs.items[si].index_number ==
+                                            state->now_playing.index_number)
+                                        { cur_pos = si; break; }
+                                }
+                            }
+                            TRY_QUEUE_NEXT(s_sibs.items, s_sibs.count,
+                                           cur_pos >= 0 ? cur_pos + 1 : 0);
+                        }
+                    }
+                }
+#undef TRY_QUEUE_NEXT
+            }
+            /* B: back to browse, keep playing */
             if (kdown & KEY_B) {
                 state->bottom_hidden = false;
                 state->current_view = state->previous_view;
             }
-            /* X to stop */
-            if (kdown & KEY_X) {
+            /* START: stop media and exit now-playing */
+            if (kdown & KEY_START) {
                 state->bottom_hidden = false;
                 video_player_stop();
                 audio_player_stop();
@@ -767,20 +1262,161 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
 
                 if (audio_done || video_done) {
                     int next = state->playing_index + 1;
-                    bool advanced = false;
-                    if (next < state->items.count &&
-                        item_is_playable(&state->items.items[next]))
-                        advanced = ui_start_item(state, session,
-                                                 &state->items.items[next],
-                                                 next, 0);
-                    if (!advanced) {
+                    if (next < state->items.count) {
+                        jfin_item_t *next_item = &state->items.items[next];
+                        bool next_playable = (next_item->type == JFIN_ITEM_AUDIO ||
+                                              next_item->type == JFIN_ITEM_MOVIE ||
+                                              next_item->type == JFIN_ITEM_EPISODE);
+                        bool next_is_video = (next_item->type == JFIN_ITEM_MOVIE ||
+                                              next_item->type == JFIN_ITEM_EPISODE);
+                        if (next_playable) {
+                            vp_3d_mode_t next_mode = item_3d_mode(next_item);
+                            jfin_stream_t stream;
+                            bool started = false;
+                            apply_sticky_subtitle(state, session, next_item->id);
+                            if (next_is_video && video_player_is_supported()) {
+                                state->video_retry_count = 0;
+                                state->video_retry_timer = 0;
+                                if (jfin_get_video_stream(session, next_item->id, 0,
+                                                          next_mode != VP_3D_NONE,
+                                                          state->subtitle_stream_index,
+                                                          &stream) &&
+                                    video_player_play(stream.url, next_item->runtime_ticks, 0, next_mode)) {
+                                    started = true;
+                                } else if (jfin_get_audio_stream(session, next_item->id, 0, &stream)) {
+                                    audio_player_play(stream.url, next_item->runtime_ticks, 0);
+                                    started = true;
+                                }
+                            } else {
+                                if (jfin_get_audio_stream(session, next_item->id, 0, &stream)) {
+                                    audio_player_play(stream.url, next_item->runtime_ticks, 0);
+                                    started = true;
+                                }
+                            }
+                            if (started) {
+                                state->now_playing = *next_item;
+                                state->playing_index = next;
+                                state->auto_stopped = false;
+                                jfin_report_start(session, next_item->id);
+                                album_art_load(session, next_item);
+                            } else {
+                                state->has_now_playing = false;
+                                state->current_view = state->previous_view;
+                            }
+                        } else {
+                            state->has_now_playing = false;
+                            state->current_view = state->previous_view;
+                        }
+                    } else {
                         state->has_now_playing = false;
                         state->current_view = state->previous_view;
                     }
                 }
             }
         }
+        if (state->np_toast_timer > 0) state->np_toast_timer--;
         break;
+
+    case VIEW_READER: {
+        reader_state_t rs = reader_get_state();
+
+        /* Once the CBZ is ready, load the pending page */
+        if (rs == READER_READY && state->reader_load_page) {
+            reader_load_page(state->reader_page, state->reader_rotated);
+            state->reader_load_page = false;
+        }
+
+        /* Auto-trigger first page load when download just finished */
+        if (rs == READER_READY && !reader_page_ready() && !state->reader_load_page)
+            state->reader_load_page = true;
+
+        /* Page navigation — only when book is open and a page is showing */
+        if (rs == READER_READY) {
+            int total = reader_page_count();
+            if (kdown & (KEY_R | KEY_DRIGHT)) {
+                if (total <= 0 || state->reader_page < total - 1) {
+                    state->reader_page++;
+                    state->reader_load_page = true;
+                    if (state->reader_split) state->reader_pan_y = 0.0f;
+                }
+            }
+            if (kdown & (KEY_L | KEY_DLEFT)) {
+                if (state->reader_page > 0) {
+                    state->reader_page--;
+                    state->reader_load_page = true;
+                    if (state->reader_split) state->reader_pan_y = 0.0f;
+                }
+            }
+        }
+
+        /* START: toggle dual-screen split mode */
+        if (kdown & KEY_START) {
+            state->reader_split = !state->reader_split;
+            if (state->reader_split && reader_page_ready()) {
+                /* Auto-zoom so the full page height fits across both 240px screens */
+                int pw = reader_page_width(), ph = reader_page_height();
+                if (pw > 0 && ph > 0) {
+                    float base_sc = 400.0f / (float)pw;
+                    float full_h  = (float)ph * base_sc;
+                    state->reader_zoom = (full_h > 0.0f) ? (480.0f / full_h) : 1.0f;
+                    if (state->reader_zoom < 0.05f) state->reader_zoom = 0.05f;
+                    if (state->reader_zoom > 3.0f)  state->reader_zoom = 3.0f;
+                }
+                state->reader_pan_x = 0.0f;
+                state->reader_pan_y = 0.0f;
+            } else if (!state->reader_split) {
+                state->reader_zoom  = 1.0f;
+                state->reader_pan_x = 0.0f;
+                state->reader_pan_y = 0.0f;
+            }
+        }
+
+        /* Circle pad: horizontal + vertical pan in both modes.
+         * Push right → image shifts left. Push up → image shifts up. */
+        if (rs == READER_READY && reader_page_ready()) {
+            circlePosition circle;
+            hidCircleRead(&circle);
+            const float dead = 0.15f;
+            float cx = (float)circle.dx / 155.0f;
+            float cy = (float)circle.dy / 155.0f;
+            if (cx >  dead) state->reader_pan_x -= 3.0f;
+            else if (cx < -dead) state->reader_pan_x += 3.0f;
+            if (cy >  dead) state->reader_pan_y += 3.0f;
+            else if (cy < -dead) state->reader_pan_y -= 3.0f;
+        }
+
+        /* D-pad Up/Down: zoom in/out in both normal and split mode */
+        if (rs == READER_READY && reader_page_ready()) {
+            if (kdown & KEY_DUP) {
+                state->reader_zoom *= 1.1f;
+                if (state->reader_zoom > 5.0f) state->reader_zoom = 5.0f;
+            }
+            if (kdown & KEY_DDOWN) {
+                state->reader_zoom *= 0.9f;
+                if (state->reader_zoom < 0.2f) state->reader_zoom = 0.2f;
+            }
+        }
+
+        /* SELECT: toggle portrait/landscape — re-extract page with new rotation */
+        if (kdown & KEY_SELECT) {
+            state->reader_rotated   = !state->reader_rotated;
+            state->reader_load_page = true;
+        }
+
+        /* B: back (cancel download if in progress, exit split mode first if active) */
+        if (kdown & KEY_B) {
+            if (state->reader_split) {
+                state->reader_split = false;
+                state->reader_zoom  = 1.0f;
+                state->reader_pan_x = 0.0f;
+                state->reader_pan_y = 0.0f;
+            } else {
+                reader_cancel();
+                state->current_view = state->previous_view;
+            }
+        }
+        break;
+    }
 
     case VIEW_SETTINGS:
         /* D-pad up/down: move cursor, skip separators */
@@ -811,6 +1447,8 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     if (g_config.video_bitrate == video_rates[i]) { cur = i; break; }
                 cur = (cur + dir + VIDEO_RATES_COUNT) % VIDEO_RATES_COUNT;
                 g_config.video_bitrate = video_rates[cur];
+            } else if (state->settings_index == SET_BG_THEME) {
+                g_config.bg_theme = (g_config.bg_theme + dir + 4) % 4;
             }
         }
 
@@ -819,16 +1457,14 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             if (state->settings_index == SET_AUTO_ADVANCE) {
                 g_config.auto_advance = !g_config.auto_advance;
                 state->auto_advance = g_config.auto_advance;
-            } else if (state->settings_index == SET_CACHE_CLEAR) {
-                /* Stop any active playback first: a cached track/video may
-                 * be open via the sdmc devoptab, and deleting an open file
-                 * underneath FFmpeg/mpg123 is undefined on FAT. */
-                audio_player_stop();
-                video_player_stop();
-                state->has_now_playing = false;
-                cache_clear();
-                s_cache_bytes_ui = 0;
-            } else if (state->settings_index == SET_LOGOUT) {
+            } else if (state->settings_index == SET_BG_THEME) {
+                g_config.bg_theme = (g_config.bg_theme + 1) % 4;
+            } else if (state->settings_index == SET_DOWNLOADS) {
+                state->downloads_scroll = 0;
+                state->downloads_index  = 0;
+                state->downloads_loaded = false;
+                state->current_view = VIEW_DOWNLOADS;
+            } else if (state->settings_index == SET_LOGOUT && session->access_token[0] != '\0') {
                 jfin_session_t *s = (jfin_session_t *)session;
                 jfin_logout(s);
                 g_config.access_token[0] = '\0';
@@ -840,13 +1476,226 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             }
         }
 
-        /* B: save and return to libraries */
+        /* Y: jump to now playing (if something is playing) */
+        if ((kdown & KEY_Y) && state->has_now_playing) {
+            state->previous_view = state->current_view;
+            state->current_view = VIEW_NOW_PLAYING;
+        }
+
+        /* B: save and return — go to libraries if logged in, login screen if not */
         if (kdown & KEY_B) {
             config_save(&g_config);
-            state->current_view = VIEW_LIBRARIES;
-            jfin_get_views(session, &state->items);
-            state->selected_index = 0;
-            state->scroll_offset = 0;
+            if (session->access_token[0] == '\0') {
+                /* Not authenticated — no network, just return to login */
+                state->current_view = VIEW_LOGIN;
+            } else {
+                state->current_view = VIEW_LIBRARIES;
+                jfin_get_views(session, &state->items);
+                state->selected_index = 0;
+                state->scroll_offset = 0;
+            }
+        }
+        break;
+
+    case VIEW_DOWNLOADS:
+        {
+            /* Auto-refresh when a queued download finishes */
+            static dl_state_t s_prev_dl = DL_IDLE;
+            dl_state_t s_cur_dl = dl_get_state();
+            if (s_prev_dl == DL_ACTIVE && s_cur_dl != DL_ACTIVE)
+                state->downloads_loaded = false;
+            s_prev_dl = s_cur_dl;
+        }
+        if (!state->downloads_loaded) {
+            dl_manager_scan();
+            state->downloads_loaded = true;
+            if (state->downloads_index >= dl_manager_count())
+                state->downloads_index = 0;
+            state->downloads_queue_focus = false;
+            state->downloads_queue_index = 0;
+        }
+
+        /* ── Circle pad: queue navigation (top screen) ─────────────── */
+        {
+            /* Index 0 = active download (when DL_ACTIVE), 1+ = queue items */
+            int has_active = (dl_get_state() == DL_ACTIVE) ? 1 : 0;
+            int total = has_active + dl_queue_count();
+            if (kdown & KEY_CPAD_UP) {
+                state->downloads_queue_focus = true;
+                if (state->downloads_queue_index > 0)
+                    state->downloads_queue_index--;
+            }
+            if (kdown & KEY_CPAD_DOWN) {
+                state->downloads_queue_focus = true;
+                if (state->downloads_queue_index < total - 1)
+                    state->downloads_queue_index++;
+            }
+            /* Clamp if items shrank */
+            if (total == 0)
+                state->downloads_queue_index = 0;
+            else if (state->downloads_queue_index >= total)
+                state->downloads_queue_index = total - 1;
+        }
+
+        /* ── D-pad: downloaded file list — hold to repeat ───────────── */
+        {
+            static int dl_rep_frames = 0;
+
+            bool nav_up    = (kdown & KEY_DUP)    != 0;
+            bool nav_down  = (kdown & KEY_DDOWN)  != 0;
+            bool nav_left  = (kdown & KEY_DLEFT)  != 0;
+            bool nav_right = (kdown & KEY_DRIGHT) != 0;
+
+            u32 any_fresh = kdown & (KEY_DUP | KEY_DDOWN | KEY_DLEFT | KEY_DRIGHT);
+            u32 any_held  = kheld & (KEY_DUP | KEY_DDOWN | KEY_DLEFT | KEY_DRIGHT);
+
+            if (any_fresh) {
+                dl_rep_frames = 0;
+            } else if (any_held) {
+                dl_rep_frames++;
+                if (dl_rep_frames >= 8) {
+                    if (dl_rep_frames % 2 == 0) {
+                        nav_up   = (kheld & KEY_DUP)   != 0;
+                        nav_down = (kheld & KEY_DDOWN)  != 0;
+                    }
+                    if (dl_rep_frames % 3 == 0) {
+                        nav_left  = (kheld & KEY_DLEFT)  != 0;
+                        nav_right = (kheld & KEY_DRIGHT) != 0;
+                    }
+                }
+            } else {
+                dl_rep_frames = 0;
+            }
+
+            if (nav_up) {
+                state->downloads_queue_focus = false;
+                if (state->downloads_index > 0) {
+                    state->downloads_index--;
+                    state->downloads_name_offset = 0;
+                    if (state->downloads_index < state->downloads_scroll)
+                        state->downloads_scroll = state->downloads_index;
+                }
+            }
+            if (nav_down) {
+                state->downloads_queue_focus = false;
+                if (state->downloads_index < dl_manager_count() - 1) {
+                    state->downloads_index++;
+                    state->downloads_name_offset = 0;
+                    if (state->downloads_index >= state->downloads_scroll + UI_MAX_VISIBLE_ITEMS)
+                        state->downloads_scroll = state->downloads_index - UI_MAX_VISIBLE_ITEMS + 1;
+                }
+            }
+            if (nav_left) {
+                state->downloads_queue_focus = false;
+                if (state->downloads_name_offset > 0)
+                    state->downloads_name_offset--;
+            }
+            if (nav_right) {
+                state->downloads_queue_focus = false;
+                int sel = state->downloads_index;
+                if (sel < dl_manager_count()) {
+                    int nlen = (int)strlen(s_dl_entries[sel].name);
+                    if (state->downloads_name_offset + 1 < nlen)
+                        state->downloads_name_offset++;
+                }
+            }
+        }
+
+        /* ── A: open file ───────────────────────────────────────────── */
+        if (kdown & KEY_A && state->downloads_index < dl_manager_count()) {
+            const dl_entry_t *e = dl_manager_get(state->downloads_index);
+            if (e) {
+                if (e->dl_type == 2) {
+                    /* Audio download: play via audio player (local MP3) */
+                    video_player_stop();
+                    audio_player_stop();
+                    audio_player_play(e->path, 0, 0);
+                    strncpy(state->now_playing.name, e->name, sizeof(state->now_playing.name)-1);
+                    state->now_playing.name[sizeof(state->now_playing.name)-1] = '\0';
+                    /* Clear video-specific fields so seek/X handlers don't use stale state */
+                    state->now_playing.id[0] = '\0';
+                    state->now_playing_local_path[0] = '\0';
+                    state->video_retry_ticks = 0;
+                    state->has_now_playing = true;
+                    state->now_playing_offline = true;
+                    state->previous_view = state->current_view;
+                    state->current_view  = VIEW_NOW_PLAYING;
+                } else if (!e->is_video) {
+                    strncpy(state->now_playing.name, e->name, sizeof(state->now_playing.name)-1);
+                    state->now_playing.name[sizeof(state->now_playing.name)-1] = '\0';
+                    state->reader_page    = 0;
+                    state->reader_load_page = false;
+                    state->reader_rotated = false;
+                    state->reader_split   = false;
+                    state->reader_zoom    = 1.0f;
+                    state->reader_pan_x   = 0.0f;
+                    state->reader_pan_y   = 0.0f;
+                    state->previous_view  = state->current_view;
+                    state->current_view   = VIEW_READER;
+                    reader_open_local(e->path);
+                } else {
+                    audio_player_stop();
+                    if (video_player_play(e->path, 0, 0, VP_3D_NONE)) {
+                        strncpy(state->now_playing.name, e->name, sizeof(state->now_playing.name)-1);
+                        state->now_playing.name[sizeof(state->now_playing.name)-1] = '\0';
+                        state->has_now_playing = true;
+                        state->now_playing_offline = true;
+                        state->video_retry_ticks = 0;  /* reset tracked seek position */
+                        snprintf(state->now_playing_local_path,
+                                 sizeof(state->now_playing_local_path), "%s", e->path);
+                        /* Use item_id stored in dl_entry_t (new cache naming) */
+                        state->now_playing.id[0] = '\0';
+                        if (e->item_id[0])
+                            strncpy(state->now_playing.id, e->item_id,
+                                    sizeof(state->now_playing.id) - 1);
+                        state->previous_view = state->current_view;
+                        state->current_view  = VIEW_NOW_PLAYING;
+                    }
+                }
+            }
+        }
+
+        /* ── X: cancel active (index 0) or remove queued item ──────── */
+        if (kdown & KEY_X) {
+            if (state->downloads_queue_focus) {
+                bool has_active = (dl_get_state() == DL_ACTIVE);
+                if (has_active && state->downloads_queue_index == 0) {
+                    dl_cancel();
+                    state->downloads_queue_focus = false;
+                    state->downloads_queue_index = 0;
+                } else {
+                    int qi = state->downloads_queue_index - (has_active ? 1 : 0);
+                    int qcnt = dl_queue_count();
+                    if (qi >= 0 && qi < qcnt) {
+                        dl_queue_remove(qi);
+                        int has_active2 = (dl_get_state() == DL_ACTIVE) ? 1 : 0;
+                        int total = has_active2 + dl_queue_count();
+                        if (state->downloads_queue_index >= total && total > 0)
+                            state->downloads_queue_index = total - 1;
+                    }
+                }
+            } else if (state->downloads_index < dl_manager_count()) {
+                dl_manager_delete(state->downloads_index);
+                dl_manager_scan();
+                state->downloads_name_offset = 0;
+                int cnt = dl_manager_count();
+                if (state->downloads_index >= cnt && cnt > 0)
+                    state->downloads_index = cnt - 1;
+            }
+        }
+
+        /* Y: return to now-playing if something is playing */
+        if ((kdown & KEY_Y) && state->has_now_playing) {
+            state->previous_view = state->current_view;
+            state->current_view = VIEW_NOW_PLAYING;
+        }
+        if (kdown & KEY_B) {
+            if (state->downloads_queue_focus) {
+                state->downloads_queue_focus = false;
+                state->downloads_queue_index = 0;
+            } else {
+                state->current_view = VIEW_SETTINGS;
+            }
         }
         break;
     }
@@ -878,7 +1727,7 @@ void ui_navigate_into(ui_state_t *state, const jfin_session_t *session,
     /* Show loading indicator before blocking API call */
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
     C2D_TextBufClear(s_text_buf);
-    C2D_TargetClear(s_bottom, rgba(COLOR_BG_DARK));
+    C2D_TargetClear(s_bottom, bg_color());
     C2D_SceneBegin(s_bottom);
     draw_text(115, 110, 0.6f, rgba(COLOR_PRIMARY), "Loading...");
     C3D_FrameEnd(0);
@@ -926,7 +1775,7 @@ void ui_navigate_back(ui_state_t *state, const jfin_session_t *session)
 void ui_render_login(const ui_state_t *state)
 {
     /* Bottom screen: login form */
-    C2D_TargetClear(s_bottom, rgba(COLOR_BG_DARK));
+    C2D_TargetClear(s_bottom, bg_color());
     C2D_SceneBegin(s_bottom);
 
     draw_text(10, 10, 0.7f, rgba(COLOR_PRIMARY), "Connect to Jellyfin Server");
@@ -944,13 +1793,13 @@ void ui_render_login(const ui_state_t *state)
     }
 
     draw_text(10, 210, 0.45f, rgba(COLOR_TEXT_SECONDARY),
-              "A: Edit field  R: Connect  START: Exit");
+              "A: Edit field  R: Connect  SEL: Settings");
 }
 
 void ui_render_libraries(const ui_state_t *state)
 {
     /* Bottom screen: library list */
-    C2D_TargetClear(s_bottom, rgba(COLOR_BG_DARK));
+    C2D_TargetClear(s_bottom, bg_color());
     C2D_SceneBegin(s_bottom);
 
     draw_text(10, 5, 0.55f, rgba(COLOR_PRIMARY), "Libraries");
@@ -967,13 +1816,18 @@ void ui_render_libraries(const ui_state_t *state)
     }
 
     draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
-              "A:Enter B:Back Y:Playing SEL:Settings");
+              "A:Enter B:Back Y:Now Playing SEL:Settings");
+}
+
+static bool item_has_download(const char *item_id, bool is_video)
+{
+    return cache_has(item_id, is_video ? "ts" : "cbz");
 }
 
 void ui_render_browse(const ui_state_t *state)
 {
     /* Bottom screen: item list */
-    C2D_TargetClear(s_bottom, rgba(COLOR_BG_DARK));
+    C2D_TargetClear(s_bottom, bg_color());
     C2D_SceneBegin(s_bottom);
 
     /* Breadcrumb */
@@ -991,22 +1845,20 @@ void ui_render_browse(const ui_state_t *state)
 
         draw_list_item_bg(y, 310, UI_LIST_ITEM_HEIGHT - 4, idx == state->selected_index);
 
-        /* Item name + badges: [3D] stereoscopic, [SD] in the offline cache */
-        const char *badge = (item->video_3d_format != JFIN_3D_NONE) ? " [3D]" : "";
-        const char *sd_badge = (item_is_playable(item) &&
-                                cache_has(item->id, item_cache_ext(item)))
-                               ? " [SD]" : "";
+        /* Item name */
+        bool is_vid_item = (item->type == JFIN_ITEM_MOVIE || item->type == JFIN_ITEM_EPISODE);
+        bool is_book_item = (item->type == JFIN_ITEM_BOOK);
+        bool has_dl = ((is_vid_item || is_book_item) &&
+                       item_has_download(item->id, is_vid_item));
+        const char *dl_badge = has_dl ? " [D]" : "";
         char label[160];
         if (item->type == JFIN_ITEM_AUDIO && item->index_number > 0) {
-            snprintf(label, sizeof(label), "%d. %s%s%s",
-                     item->index_number, item->name, badge, sd_badge);
+            snprintf(label, sizeof(label), "%d. %s%s", item->index_number, item->name, dl_badge);
         } else if (item->type == JFIN_ITEM_EPISODE && item->index_number > 0) {
-            snprintf(label, sizeof(label), "E%d - %s%s%s",
-                     item->index_number, item->name, badge, sd_badge);
+            snprintf(label, sizeof(label), "E%d - %s%s", item->index_number, item->name, dl_badge);
         } else {
-            snprintf(label, sizeof(label), "%s%s%s", item->name, badge, sd_badge);
+            snprintf(label, sizeof(label), "%s%s", item->name, dl_badge);
         }
-
         draw_text(15, y + 4, 0.5f, rgba(COLOR_TEXT_PRIMARY), label);
 
         /* Subtitle: artist/year/duration */
@@ -1044,10 +1896,28 @@ void ui_render_browse(const ui_state_t *state)
         draw_text(220, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY), info);
     }
 
-    if (state->items.total_count > JFIN_MAX_ITEMS)
-        draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY), "A:Sel B:Back X:DL L/R:Pg SEL:Srch");
-    else
-        draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY), "A:Sel B:Back X:DL Y:Play SEL:Srch");
+    {
+        bool sel_dl = false;
+        if (state->selected_index < state->items.count) {
+            jfin_item_type_t t = state->items.items[state->selected_index].type;
+            sel_dl = (t == JFIN_ITEM_MOVIE || t == JFIN_ITEM_EPISODE ||
+                      t == JFIN_ITEM_BOOK  || t == JFIN_ITEM_AUDIO   ||
+                      t == JFIN_ITEM_MUSIC_ALBUM);
+        }
+        bool paginating = (state->items.total_count > JFIN_MAX_ITEMS);
+        if (paginating && sel_dl)
+            draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
+                      "A:Sel  X:DL  L/R:Pg  B:Back");
+        else if (paginating)
+            draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
+                      "A:Sel  B:Back  L/R:Pg  SEL:Search");
+        else if (sel_dl)
+            draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
+                      "A:Play  X:DL  ZL+X:DL+Sub  B:Back");
+        else
+            draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
+                      "A:Select  B:Back  SEL:Search");
+    }
 }
 
 void ui_render_now_playing(const ui_state_t *state, const player_status_t *player)
@@ -1065,14 +1935,31 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     }
 
     if (is_video && vstatus.state == VIDEO_ERROR) {
-        /* Show error prominently on top screen */
-        draw_text(50, 60, 0.7f, rgba(0xFF4444FF), "Playback Error");
-        draw_text(30, 100, 0.5f, rgba(COLOR_TEXT_PRIMARY),
-                  vstatus.error_msg[0] ? vstatus.error_msg : "Cannot play this content");
-        draw_text(30, 140, 0.5f, rgba(COLOR_TEXT_SECONDARY),
-                  state->now_playing.name);
-        draw_text(60, 190, 0.45f, rgba(COLOR_TEXT_SECONDARY),
-                  "Press any button to go back");
+        int max_retries = (state->subtitle_stream_index >= 0) ? 5 : 3;
+        bool retrying = !state->now_playing_offline
+                        && (strncmp(vstatus.error_msg, "Video not ready", 15) == 0)
+                        && state->video_retry_count < max_retries
+                        && state->video_retry_timer > 0;
+        if (retrying) {
+            int secs = (state->video_retry_timer + 59) / 60;
+            char rbuf[48];
+            snprintf(rbuf, sizeof(rbuf), "Retrying in %ds (%d/%d)...", secs,
+                     state->video_retry_count + 1, max_retries);
+            draw_text(60, 70, 0.65f, rgba(COLOR_PRIMARY), "Subtitle transcode starting");
+            draw_text(40, 108, 0.5f, rgba(COLOR_TEXT_PRIMARY), rbuf);
+            draw_text(30, 143, 0.5f, rgba(COLOR_TEXT_SECONDARY), state->now_playing.name);
+            draw_text(35, 178, 0.4f, rgba(COLOR_TEXT_SECONDARY),
+                      "Will retry without subs if it keeps failing");
+            draw_text(60, 200, 0.45f, rgba(COLOR_TEXT_SECONDARY), "Press any button to cancel");
+        } else {
+            draw_text(50, 60, 0.7f, rgba(0xFF4444FF), "Playback Error");
+            draw_text(30, 100, 0.5f, rgba(COLOR_TEXT_PRIMARY),
+                      vstatus.error_msg[0] ? vstatus.error_msg : "Cannot play this content");
+            draw_text(30, 140, 0.5f, rgba(COLOR_TEXT_SECONDARY),
+                      state->now_playing.name);
+            draw_text(60, 190, 0.45f, rgba(COLOR_TEXT_SECONDARY),
+                      "Press any button to go back");
+        }
     } else if (is_video && vstatus.state == VIDEO_LOADING) {
         /* Show buffering indicator while video is loading */
         draw_text(130, 100, 0.7f, rgba(COLOR_PRIMARY), "Buffering...");
@@ -1182,14 +2069,61 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
         draw_text(30, 125, 0.38f, rgba(COLOR_TEXT_SECONDARY), diag);
     }
 
+    /* Subtitle status */
+    if (is_video) {
+        char sub_str[64];
+        if (state->now_playing_offline) {
+            snprintf(sub_str, sizeof(sub_str), "Subs: Encoded at download");
+        } else if (state->subtitle_stream_index >= 0) {
+            const char *label = state->subtitle_lang_pref[0]
+                                ? state->subtitle_lang_pref : "on";
+            for (int si = 0; si < state->subtitle_list.count; si++) {
+                if (state->subtitle_list.subs[si].index == state->subtitle_stream_index) {
+                    if (state->subtitle_list.subs[si].title[0])
+                        label = state->subtitle_list.subs[si].title;
+                    break;
+                }
+            }
+            snprintf(sub_str, sizeof(sub_str), "Subs: %s%s",
+                     label, state->subtitle_sticky ? " (sticky)" : "");
+        } else {
+            snprintf(sub_str, sizeof(sub_str), "Subs: Off");
+        }
+        draw_text(30, 145, 0.4f, rgba(
+            state->subtitle_stream_index >= 0 ? COLOR_ACCENT : COLOR_TEXT_SECONDARY),
+            sub_str);
+    }
+
+    /* Shuffle/repeat status (audio only) */
+    if (!is_video) {
+        const char *rep_str = (state->repeat_mode == 1) ? "Rep:1  " :
+                              (state->repeat_mode == 2) ? "Rep:All" : "Rep:Off";
+        const char *shuf_str = state->shuffle_mode ? "Shuf:ON " : "Shuf:OFF";
+        char mode_str[32];
+        snprintf(mode_str, sizeof(mode_str), "%s  %s", shuf_str, rep_str);
+        draw_text(60, 125, 0.42f,
+                  rgba(state->shuffle_mode || state->repeat_mode ? COLOR_ACCENT : COLOR_TEXT_SECONDARY),
+                  mode_str);
+    }
+
+    /* Toast notification */
+    if (state->np_toast_timer > 0)
+        draw_text(10, 163, 0.42f, rgba(COLOR_ACCENT), state->np_toast);
+
     /* Controls hint */
-    draw_text(20, 180, 0.45f, rgba(COLOR_TEXT_PRIMARY),
-              "A:Pause X:Stop B:Back L/R:Seek");
+    const char *ctl_hint;
+    if (!is_video)
+        ctl_hint = "A:Pause B:Back STR:Stop ZL/ZR:Skip Y:Shuf SEL:Rep";
+    else if (state->now_playing_offline)
+        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek X:DLnxt ZL+X:+sub";
+    else
+        ctl_hint = "A:Pause B:Back STR:Stop L/R:Seek Y:Subs X:DLnxt ZL+X:+sub";
+    draw_text(10, 180, 0.4f, rgba(COLOR_TEXT_PRIMARY), ctl_hint);
 }
 
 void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
 {
-    C2D_TargetClear(s_bottom, rgba(COLOR_BG_DARK));
+    C2D_TargetClear(s_bottom, bg_color());
     C2D_SceneBegin(s_bottom);
 
     draw_text(10, 5, 0.55f, rgba(COLOR_PRIMARY), "Settings");
@@ -1228,10 +2162,16 @@ void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
             label = "Auto-advance";
             snprintf(value, sizeof(value), "%s", g_config.auto_advance ? "On" : "Off");
             break;
-        case SET_CACHE_CLEAR:
-            label = "Offline Cache";
-            snprintf(value, sizeof(value), "%llu MB  A: clear",
-                     (unsigned long long)(s_cache_bytes_ui / (1024 * 1024)));
+        case SET_BG_THEME: {
+            label = "Background";
+            const char *themes[] = { "Dark", "Black", "White", "Grey" };
+            int th = (g_config.bg_theme >= 0 && g_config.bg_theme < 4) ? g_config.bg_theme : 0;
+            snprintf(value, sizeof(value), "%s", themes[th]);
+            break;
+        }
+        case SET_DOWNLOADS:
+            label = "Manage Downloads";
+            snprintf(value, sizeof(value), "A: Open");
             break;
         case SET_SERVER:
             label = "Server";
@@ -1247,7 +2187,12 @@ void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
             break;
         case SET_LOGOUT:
             label = "Logout";
-            value_color = rgba(COLOR_DANGER);
+            if (session->access_token[0] != '\0') {
+                value_color = rgba(COLOR_DANGER);
+            } else {
+                snprintf(value, sizeof(value), "(not logged in)");
+                value_color = rgba(COLOR_TEXT_SECONDARY);
+            }
             break;
         case SET_VERSION:
             label = "Version";
@@ -1264,14 +2209,359 @@ void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
         }
 
         draw_text(15, y + 10, 0.5f,
-                  idx == SET_LOGOUT ? rgba(COLOR_DANGER) : rgba(COLOR_TEXT_PRIMARY),
+                  (idx == SET_LOGOUT && session->access_token[0] != '\0')
+                      ? rgba(COLOR_DANGER) : rgba(COLOR_TEXT_PRIMARY),
                   label);
         if (value[0])
             draw_text(200, y + 10, 0.45f, value_color, value);
     }
 
+    if (state->has_now_playing) {
+        draw_text(10, 213, 0.4f, rgba(COLOR_TEXT_SECONDARY),
+                  "A:Toggle L/R:Change B:Back");
+        draw_text(10, 228, 0.38f, rgba(COLOR_ACCENT), "Y:Now Playing");
+    } else {
+        draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
+                  "A:Toggle L/R:Change B:Back");
+    }
+}
+
+/* ── Manga reader render ───────────────────────────────────────────── */
+
+void ui_render_reader(const ui_state_t *state)
+{
+    reader_state_t rs = reader_get_state();
+
+    /* Top screen: page image or status overlay */
+    C2D_TargetClear(s_top, bg_color());
+    C2D_SceneBegin(s_top);
+
+    if (reader_page_ready()) {
+        if (state->reader_split) {
+            reader_draw_split_top(state->reader_zoom,
+                                  state->reader_pan_x, state->reader_pan_y);
+        } else {
+            reader_draw(0, 0, TOP_SCREEN_WIDTH, TOP_SCREEN_HEIGHT,
+                        state->reader_zoom, state->reader_pan_x, state->reader_pan_y);
+        }
+    } else if (rs == READER_DOWNLOADING) {
+        size_t total = reader_dl_total();
+        size_t bytes = reader_dl_bytes();
+        draw_text(115, 75, 0.52f, rgba(COLOR_TEXT_SECONDARY),
+                  "Downloading book...");
+        char dl_str[48];
+        if (total > 0)
+            snprintf(dl_str, sizeof(dl_str), "%.1f / %.1f MB",
+                     bytes / (1024.0f * 1024.0f),
+                     total / (1024.0f * 1024.0f));
+        else
+            snprintf(dl_str, sizeof(dl_str), "%.1f MB downloaded",
+                     bytes / (1024.0f * 1024.0f));
+        draw_text(110, 105, 0.58f, rgba(COLOR_PRIMARY), dl_str);
+
+        /* Progress bar (shown when Content-Length is known) */
+        if (total > 0) {
+            float pct = (float)bytes / (float)total;
+            if (pct > 1.0f) pct = 1.0f;
+            int bx = 60, by = 140, bw = 280, bh = 10;
+            C2D_DrawRectSolid(bx, by, 0.5f, bw, bh, rgba(COLOR_BG_CARD));
+            C2D_DrawRectSolid(bx, by, 0.5f, (int)(bw * pct), bh, rgba(COLOR_PRIMARY));
+        }
+        draw_text(140, 170, 0.42f, rgba(COLOR_TEXT_SECONDARY), "B: Cancel");
+    } else if (rs == READER_ERROR) {
+        draw_text(100, 80,  0.55f, rgba(0xFF5555FF), "Failed to open book");
+        draw_text(55,  110, 0.42f, rgba(COLOR_TEXT_SECONDARY),
+                  "Could not download from Jellyfin.");
+        draw_text(55,  130, 0.42f, rgba(COLOR_TEXT_SECONDARY),
+                  "Check server URL, auth, and debug.log");
+        draw_text(125, 170, 0.48f, rgba(COLOR_TEXT_PRIMARY), "B: Back");
+    } else {
+        /* READER_READY but page not yet extracted */
+        draw_text(135, 105, 0.55f, rgba(COLOR_TEXT_SECONDARY), "Loading page...");
+    }
+
+    if (state->reader_split && reader_page_ready()) {
+        /* Split mode: bottom screen shows the lower half of the page */
+        C2D_TargetClear(s_bottom, rgba(0x000000FF));
+        C2D_SceneBegin(s_bottom);
+        reader_draw_split_bottom(state->reader_zoom,
+                                 state->reader_pan_x, state->reader_pan_y);
+        /* Translucent hint strip at bottom edge */
+        draw_rect(0, 228, 320, 12, rgba(0x00000099));
+        draw_text(4, 229, 0.33f, rgba(COLOR_TEXT_SECONDARY),
+                  "START:normal  Dpad:Zoom  Circle:Pan  L/R:page");
+    } else {
+        /* Normal mode: bottom screen shows controls */
+        C2D_TargetClear(s_bottom, bg_color());
+        C2D_SceneBegin(s_bottom);
+
+        draw_text(10, 5, 0.45f, rgba(COLOR_TEXT_SECONDARY), state->now_playing.name);
+
+        if (reader_page_ready()) {
+            char pg_str[32];
+            int total = reader_page_count();
+            if (total > 0)
+                snprintf(pg_str, sizeof(pg_str), "Page %d / %d",
+                         state->reader_page + 1, total);
+            else
+                snprintf(pg_str, sizeof(pg_str), "Page %d", state->reader_page + 1);
+            draw_text(90, 95, 0.6f, rgba(COLOR_PRIMARY), pg_str);
+
+            /* Zoom level indicator when not at 1.0 */
+            if (state->reader_zoom < 0.99f || state->reader_zoom > 1.01f) {
+                char zoom_str[16];
+                snprintf(zoom_str, sizeof(zoom_str), "Zoom: %.0f%%",
+                         state->reader_zoom * 100.0f);
+                draw_text(105, 125, 0.42f, rgba(COLOR_VALUE), zoom_str);
+            }
+
+            /* Orientation indicator */
+            draw_text(85, 145, 0.42f,
+                      state->reader_rotated ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_SECONDARY),
+                      state->reader_rotated ? "Landscape (SELECT: normal)"
+                                            : "Portrait  (SELECT: landscape)");
+
+            draw_text(5, 196, 0.38f, rgba(COLOR_TEXT_PRIMARY),
+                      "L/R:Page  SEL:Rotate  START:Split  B:Back");
+            draw_text(5, 213, 0.38f, rgba(COLOR_TEXT_SECONDARY),
+                      "Dpad(U/D):Zoom  Circle:Pan");
+        }
+    }
+}
+
+/* ── Downloads manager render ──────────────────────────────────────── */
+
+void ui_render_downloads(const ui_state_t *state)
+{
+    C2D_TargetClear(s_top, bg_color());
+    C2D_SceneBegin(s_top);
+
+    draw_text(10, 4, 0.52f, rgba(COLOR_PRIMARY), "Download Status");
+
+    dl_state_t vds  = dl_get_state();
+    int        qcnt = dl_queue_count();
+
+    /* ── Speed / progress tracking (sampled ~every second) ────────── */
+    static size_t     s_dl_prev_bytes = 0;
+    static uint64_t   s_dl_prev_tick  = 0;
+    static float      s_dl_speed      = 0.0f;
+    static dl_state_t s_dl_prev_state = DL_IDLE;
+
+    uint64_t dl_tick = svcGetSystemTick();
+    size_t   dl_now  = (vds == DL_ACTIVE) ? dl_bytes() : 0;
+    size_t   dl_tot  = (vds == DL_ACTIVE) ? dl_total() : 0;
+
+    if (vds != s_dl_prev_state) {
+        s_dl_prev_bytes = dl_now;
+        s_dl_prev_tick  = dl_tick;
+        s_dl_speed      = 0.0f;
+        s_dl_prev_state = vds;
+    }
+    {
+        uint64_t diff = dl_tick - s_dl_prev_tick;
+        if (vds == DL_ACTIVE && diff >= 268000000ULL && dl_now >= s_dl_prev_bytes) {
+            float dt_s      = (float)diff / 268000000.0f;
+            float new_sp    = (float)(dl_now - s_dl_prev_bytes) / dt_s;
+            s_dl_speed      = (s_dl_speed > 0.0f) ? s_dl_speed * 0.6f + new_sp * 0.4f : new_sp;
+            s_dl_prev_bytes = dl_now;
+            s_dl_prev_tick  = dl_tick;
+        }
+    }
+
+    char spd_str[20] = "";
+    if      (s_dl_speed >= 1048576.0f) snprintf(spd_str, sizeof(spd_str), "%.1fMB/s", s_dl_speed/1048576.0f);
+    else if (s_dl_speed >= 1024.0f)    snprintf(spd_str, sizeof(spd_str), "%.0fKB/s", s_dl_speed/1024.0f);
+    else if (s_dl_speed > 0.0f)        snprintf(spd_str, sizeof(spd_str), "%.0fB/s",  s_dl_speed);
+
+    char eta_str[20] = "";
+    if (s_dl_speed > 1024.0f && dl_tot > dl_now) {
+        int secs = (int)((float)(dl_tot - dl_now) / s_dl_speed);
+        if      (secs >= 3600) snprintf(eta_str, sizeof(eta_str), "~%dh%02dm", secs/3600, (secs%3600)/60);
+        else if (secs >= 60)   snprintf(eta_str, sizeof(eta_str), "~%dm%02ds", secs/60, secs%60);
+        else                   snprintf(eta_str, sizeof(eta_str), "~%ds",       secs);
+    }
+
+    int dl_pct = (dl_tot > 0) ? (int)((float)dl_now / (float)dl_tot * 100.0f) : -1;
+
+    /* Active download */
+    if (vds == DL_ACTIVE) {
+        char name_buf[64];
+        int retry = dl_retry_count();
+        if (retry > 0)
+            snprintf(name_buf, sizeof(name_buf), "%.40s [Attempt %d/3]", dl_item_name(), retry + 1);
+        else
+            snprintf(name_buf, sizeof(name_buf), "%.54s", dl_item_name());
+        draw_text(10, 26, 0.42f, rgba(COLOR_ACCENT), name_buf);
+        if (dl_sub_name()[0]) {
+            char si[72];
+            snprintf(si, sizeof(si), "Subs: %s", dl_sub_name());
+            draw_text(10, 40, 0.34f, rgba(COLOR_VALUE), si);
+        }
+        if (dl_tot > 0) {
+            int fill = (int)(380.0f * (float)dl_now / (float)dl_tot);
+            draw_rect(10, 53, 380, 8, rgba(COLOR_BG_CARD));
+            draw_rect(10, 53, fill, 8, rgba(COLOR_PRIMARY));
+            char prog[64];
+            snprintf(prog, sizeof(prog), "%.1f / %.1f MB  (%d%%)",
+                     dl_now/1048576.0f, dl_tot/1048576.0f, dl_pct);
+            draw_text(10, 64, 0.38f, rgba(COLOR_TEXT_SECONDARY), prog);
+        } else {
+            char prog[48];
+            snprintf(prog, sizeof(prog), "%.1f MB downloaded", dl_now/1048576.0f);
+            draw_text(10, 64, 0.38f, rgba(COLOR_TEXT_SECONDARY), prog);
+        }
+        if (spd_str[0]) {
+            char spd_eta[44] = "";
+            if (eta_str[0])
+                snprintf(spd_eta, sizeof(spd_eta), "%s  %s", spd_str, eta_str);
+            else
+                snprintf(spd_eta, sizeof(spd_eta), "%s", spd_str);
+            draw_text(10, 76, 0.38f, rgba(COLOR_ACCENT), spd_eta);
+        }
+    } else if (vds == DL_DONE) {
+        draw_text(10, 26, 0.42f, rgba(0x88FF88FF), "Last download complete");
+    } else if (vds == DL_ERROR) {
+        int retry = dl_retry_count();
+        char err_buf[56];
+        snprintf(err_buf, sizeof(err_buf), "Download failed (after %d attempt%s)",
+                 retry + 1, retry + 1 == 1 ? "" : "s");
+        draw_text(10, 26, 0.42f, rgba(COLOR_DANGER), err_buf);
+        draw_text(10, 42, 0.36f, rgba(COLOR_TEXT_SECONDARY), "Re-queue to resume from partial file");
+    } else {
+        draw_text(10, 26, 0.42f, rgba(COLOR_TEXT_SECONDARY), "No active download");
+        draw_text(10, 42, 0.38f, rgba(COLOR_TEXT_SECONDARY), "Browse items and press X to queue");
+    }
+
+    /* Queue list: index 0 = active download, 1+ = queued items */
+    int qy = 90;
+    bool has_active = (vds == DL_ACTIVE);
+    int active_off  = has_active ? 1 : 0;
+    int total_slots = active_off + qcnt;
+    if (total_slots > 0) {
+        char qhdr[64];
+        snprintf(qhdr, sizeof(qhdr), "Queue: %d item%s%s",
+                 total_slots, total_slots == 1 ? "" : "s",
+                 state->downloads_queue_focus ? "  [Circle]" : "");
+        draw_text(10, qy, 0.44f,
+                  state->downloads_queue_focus ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_PRIMARY),
+                  qhdr);
+        qy += 18;
+        int shown = 0;
+        if (has_active && shown < 6) {
+            bool qsel = state->downloads_queue_focus && (state->downloads_queue_index == 0);
+            char ql[72];
+            if (dl_pct >= 0)
+                snprintf(ql, sizeof(ql), "%s1. [%d%%] %.43s", qsel ? "> " : "  ", dl_pct, dl_item_name());
+            else
+                snprintf(ql, sizeof(ql), "%s1. [DL] %.46s",   qsel ? "> " : "  ", dl_item_name());
+            draw_text(10, qy, 0.38f,
+                      qsel ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_SECONDARY), ql);
+            qy += 15;
+            shown++;
+        }
+        for (int qi = 0; qi < qcnt && shown < 6; qi++) {
+            int slot = qi + active_off;
+            bool qsel = state->downloads_queue_focus && (slot == state->downloads_queue_index);
+            char ql[72];
+            snprintf(ql, sizeof(ql), "%s%d. %.50s",
+                     qsel ? "> " : "  ", slot + 1, dl_queue_item_name(qi));
+            draw_text(10, qy, 0.38f,
+                      qsel ? rgba(COLOR_TEXT_PRIMARY) : rgba(COLOR_TEXT_SECONDARY), ql);
+            qy += 15;
+            shown++;
+        }
+        if (total_slots > 6)
+            draw_text(10, qy, 0.36f, rgba(COLOR_TEXT_SECONDARY), "  ...");
+    } else {
+        draw_text(10, qy, 0.40f, rgba(COLOR_TEXT_SECONDARY), "Queue empty");
+    }
+
+    /* Hint at bottom of top screen */
+    if (state->downloads_queue_focus)
+        draw_text(10, 225, 0.36f, rgba(COLOR_TEXT_SECONDARY),
+                  "Circle:Nav  X:Cancel/Remove  B:Exit");
+    else if (total_slots > 0)
+        draw_text(10, 225, 0.36f,
+                  state->has_now_playing ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_SECONDARY),
+                  "Circle:Select  Y:Now Playing");
+
+    C2D_TargetClear(s_bottom, bg_color());
+    C2D_SceneBegin(s_bottom);
+
+    draw_text(10, 5, 0.55f, rgba(COLOR_PRIMARY), "Downloads");
+
+    int cnt = dl_manager_count();
+    if (cnt == 0) {
+        draw_text(40, 100, 0.48f, rgba(COLOR_TEXT_SECONDARY), "No downloaded files");
+        draw_text(20, 130, 0.42f, rgba(COLOR_TEXT_SECONDARY), "Browse: A=play, X=queue download");
+        draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY), "B:Back");
+        return;
+    }
+
+    /* Scrollbar */
+    if (cnt > UI_MAX_VISIBLE_ITEMS) {
+        int bar_h = 190;
+        int bar_y = 30;
+        int thumb_h = bar_h * UI_MAX_VISIBLE_ITEMS / cnt;
+        if (thumb_h < 8) thumb_h = 8;
+        int thumb_y = bar_y + (bar_h - thumb_h) * state->downloads_scroll
+                              / (cnt - UI_MAX_VISIBLE_ITEMS);
+        draw_rect(308, bar_y, 4, bar_h, rgba(COLOR_BG_CARD));
+        draw_rect(308, thumb_y, 4, thumb_h, rgba(COLOR_PRIMARY));
+    }
+
+    for (int i = 0; i < UI_MAX_VISIBLE_ITEMS + 1 && i + state->downloads_scroll < cnt; i++) {
+        int idx = state->downloads_scroll + i;
+        float y = 30 + i * UI_LIST_ITEM_HEIGHT;
+        bool sel = (idx == state->downloads_index);
+
+        /* Draw thin separator at the start of a new type/series group */
+        if (idx > 0) {
+            bool new_type   = s_dl_entries[idx].dl_type != s_dl_entries[idx-1].dl_type;
+            bool new_series = strcmp(s_dl_entries[idx].series, s_dl_entries[idx-1].series) != 0;
+            if (new_type || new_series)
+                draw_rect(14, (int)y, 288, 1, rgba(COLOR_ACCENT));
+        }
+
+        draw_list_item_bg(y, 306, UI_LIST_ITEM_HEIGHT - 4, sel);
+
+        /* For selected item: scroll name if offset > 0 or name is long */
+        char disp[40];
+        const char *full_name = s_dl_entries[idx].name;
+        int nlen = (int)strlen(full_name);
+        if (sel && state->downloads_name_offset > 0 && state->downloads_name_offset < nlen) {
+            const char *shifted = full_name + state->downloads_name_offset;
+            int remain = nlen - state->downloads_name_offset;
+            snprintf(disp, sizeof(disp), "%.*s%s", remain > 36 ? 36 : remain, shifted,
+                     remain > 36 ? ">" : "");
+        } else {
+            snprintf(disp, sizeof(disp), "%.36s%s", full_name, nlen > 36 ? ">" : "");
+        }
+
+        /* Type-based accent color: VID=blue, AUD=purple, CBZ=red */
+        u32 type_col = (s_dl_entries[idx].dl_type == 0) ? 0x5599FFFF   /* VID blue   */
+                     : (s_dl_entries[idx].dl_type == 2) ? 0xBB66EEFF   /* AUD purple */
+                     :                                    0xFF7777FF;   /* CBZ red    */
+        draw_text(14, y + 4, 0.45f, rgba(type_col), disp);
+
+        char size_str[20];
+        float sz_mb = s_dl_entries[idx].sz / (1024.0f * 1024.0f);
+        if (sz_mb >= 1.0f)
+            snprintf(size_str, sizeof(size_str), "%.1fMB", sz_mb);
+        else
+            snprintf(size_str, sizeof(size_str), "%zuKB", s_dl_entries[idx].sz / 1024);
+
+        const char *type = s_dl_entries[idx].dl_type == 0 ? "VID"
+                         : s_dl_entries[idx].dl_type == 2 ? "AUD" : "CBZ";
+        char meta[32];
+        snprintf(meta, sizeof(meta), "%s %s", type, size_str);
+        draw_text(218, y + 4, 0.4f, rgba(type_col), meta);
+    }
+
     draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
-              "A:Toggle L/R:Change B:Back");
+              state->downloads_queue_focus
+                  ? "A:Open  X:Cancel/Del  B:Exit queue"
+                  : "A:Open  X:Delete  Y:Now Playing  B:Back");
 }
 
 /* ── Main render dispatch ──────────────────────────────────────────── */
@@ -1292,15 +2582,21 @@ void ui_render(const ui_state_t *state, const jfin_session_t *session,
     C2D_TextBufClear(s_text_buf);
     C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
 
-    /* Top screen: branding or now-playing */
+    /* Top screen: branding, now-playing, or view-specific full render */
     if (state->current_view == VIEW_NOW_PLAYING) {
         ui_render_now_playing(state, player);
+    } else if (state->current_view == VIEW_READER) {
+        ui_render_reader(state);
+    } else if (state->current_view == VIEW_DOWNLOADS) {
+        ui_render_downloads(state);
     } else {
-        C2D_TargetClear(s_top, rgba(COLOR_BG_DARK));
+        C2D_TargetClear(s_top, bg_color());
         C2D_SceneBegin(s_top);
 
-        draw_text(100, 80, 1.0f, rgba(COLOR_PRIMARY), "Jellyfin 3DS");
-        draw_text(130, 120, 0.5f, rgba(COLOR_TEXT_SECONDARY), "v" JFIN_VERSION);
+        draw_text(118, 80, 1.0f, rgba(COLOR_PRIMARY), "Jellyfin 3DS");
+        draw_text(179, 118, 0.48f, rgba(COLOR_TEXT_SECONDARY), "v" JFIN_VERSION);
+        draw_text(92, 145, 0.4f, rgba(COLOR_ACCENT),
+                  "CBZ/Manga  \xe2\x80\xa2  Subtitles  \xe2\x80\xa2  Downloads");
 
         /* Show mini now-playing bar if something is playing */
         if (state->has_now_playing && player->state == PLAYER_PLAYING) {
@@ -1308,6 +2604,23 @@ void ui_render(const ui_state_t *state, const jfin_session_t *session,
             draw_text(10, 215, 0.45f, rgba(COLOR_TEXT_PRIMARY),
                       state->now_playing.name);
             draw_text(340, 215, 0.4f, rgba(COLOR_ACCENT), "Y: View");
+        }
+
+        /* Video download progress toast */
+        dl_state_t cur_dl = dl_get_state();
+        if (cur_dl == DL_ACTIVE) {
+            size_t tot = dl_total(), now = dl_bytes();
+            char dl_line1[64], dl_line2[48];
+            snprintf(dl_line1, sizeof(dl_line1), "DL: %.28s", dl_item_name());
+            if (tot > 0)
+                snprintf(dl_line2, sizeof(dl_line2), "%.1f / %.1fMB  (queue: %d)",
+                         now / (1024.0f*1024.0f), tot / (1024.0f*1024.0f), dl_queue_count());
+            else
+                snprintf(dl_line2, sizeof(dl_line2), "%.1fMB downloaded  (queue: %d)",
+                         now / (1024.0f*1024.0f), dl_queue_count());
+            draw_rect(0, 0, 400, 28, rgba(0x000000CC));
+            draw_text(5, 1, 0.38f, rgba(COLOR_ACCENT), dl_line1);
+            draw_text(5, 14, 0.38f, rgba(COLOR_TEXT_SECONDARY), dl_line2);
         }
     }
 
@@ -1325,8 +2638,14 @@ void ui_render(const ui_state_t *state, const jfin_session_t *session,
     case VIEW_NOW_PLAYING:
         /* Already rendered above (both screens) */
         break;
+    case VIEW_READER:
+        /* Already rendered above (both screens) */
+        break;
     case VIEW_SETTINGS:
         ui_render_settings(state, session);
+        break;
+    case VIEW_DOWNLOADS:
+        /* Already rendered above (both screens) */
         break;
     }
 
