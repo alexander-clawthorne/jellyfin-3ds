@@ -754,7 +754,7 @@ static void decode_thread_func(void *arg)
                  * which would make position_ticks = seek_offset + seek_time ≈ 2×seek.
                  * Cancel the pre-roll PTS out of seek_offset so that subsequent
                  * position_ticks = corrected_seek_offset + video_pts = seek_offset. */
-                if (audio_skipped > 0 && pkt->pts != AV_NOPTS_VALUE) {
+                if (!s_vp.is_local && audio_skipped > 0 && pkt->pts != AV_NOPTS_VALUE) {
                     AVFormatContext *_fmt = (AVFormatContext *)s_vp.demux.fmt_ctx;
                     AVRational _tb = _fmt->streams[s_vp.demux.video_stream_idx]->time_base;
                     double first_video_pts = pkt->pts * (double)_tb.num / (double)_tb.den;
@@ -1315,6 +1315,20 @@ static void subtitle_load(const char *url)
     log_write("SUB: fetched %zu bytes", buf.size);
     subtitle_parse_ass(buf.data);
     free(buf.data);
+}
+
+void video_player_clear_subtitles(void)
+{
+    free(s_vp.subtitle_entries);
+    s_vp.subtitle_entries = NULL;
+    s_vp.subtitle_count = 0;
+}
+
+void video_player_load_subtitles(const char *url)
+{
+    if (!url || !url[0]) return;
+    video_player_clear_subtitles();
+    subtitle_load(url);
 }
 
 bool video_player_play(const char *url, const char *subtitle_url,

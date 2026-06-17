@@ -105,6 +105,17 @@ video_status_t video_player_get_status(void);
 int video_player_get_subtitles(vp_subtitle_t *out, int max_count);
 
 /**
+ * Clear currently loaded subtitle cues (turns subtitles off without restarting playback).
+ */
+void video_player_clear_subtitles(void);
+
+/**
+ * Load subtitle cues from a URL or sdmc:/ path (without restarting playback).
+ * Replaces any previously loaded cues.
+ */
+void video_player_load_subtitles(const char *url);
+
+/**
  * Must be called each frame from the main loop.
  * Handles frame display on the top screen.
  */

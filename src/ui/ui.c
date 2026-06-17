@@ -1098,8 +1098,9 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     if (state->now_playing_offline) {
                         /* Seek by byte offset in local TS file (net_thread estimates position) */
                         state->video_retry_ticks = new_pos;
-                        video_player_play(state->now_playing_local_path,
-                                          state->now_playing_sub_path[0] ? state->now_playing_sub_path : NULL,
+                        const char *seek_sub = (state->offline_subs_on && state->now_playing_sub_path[0])
+                                               ? state->now_playing_sub_path : NULL;
+                        video_player_play(state->now_playing_local_path, seek_sub,
                                           0, new_pos, VP_3D_NONE);
                     } else {
                         vp_3d_mode_t mode_3d = item_3d_mode(&state->now_playing);
@@ -1119,6 +1120,19 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                             audio_player_play(stream.url, state->now_playing.runtime_ticks, new_pos);
                     }
                 }
+            }
+            /* Y (video offline): toggle subtitle display on/off */
+            if ((kdown & KEY_Y) && vid_active && state->now_playing_offline
+                && state->now_playing_sub_path[0]) {
+                state->offline_subs_on = !state->offline_subs_on;
+                if (state->offline_subs_on) {
+                    video_player_load_subtitles(state->now_playing_sub_path);
+                    snprintf(state->np_toast, sizeof(state->np_toast), "Subtitles on");
+                } else {
+                    video_player_clear_subtitles();
+                    snprintf(state->np_toast, sizeof(state->np_toast), "Subtitles off");
+                }
+                state->np_toast_timer = 150;
             }
             /* Y (video online): cycle subtitle tracks */
             if ((kdown & KEY_Y) && vid_active && !state->now_playing_offline) {
@@ -1739,6 +1753,7 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                                  sizeof(state->now_playing_local_path), "%s", e->path);
                         snprintf(state->now_playing_sub_path,
                                  sizeof(state->now_playing_sub_path), "%s", loc_sub_path);
+                        state->offline_subs_on = (loc_sub_path[0] != '\0');
                         /* Use item_id stored in dl_entry_t (new cache naming) */
                         state->now_playing.id[0] = '\0';
                         if (e->item_id[0])
