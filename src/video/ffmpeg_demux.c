@@ -36,8 +36,12 @@ static int ring_read_for_avio(void *opaque, uint8_t *buf, int buf_size)
     int waited = 0;
     while (__atomic_load_n(&ctx->ring_fill, __ATOMIC_ACQUIRE) < buf_size
            && !__atomic_load_n(&ctx->ring_finished, __ATOMIC_ACQUIRE)) {
-        if (waited > 15000) /* 15 seconds — allows net thread retries on WiFi drops */
+        if (waited > 15000) { /* 15 seconds — allows net thread retries on WiFi drops */
+            log_write("DEC: ring_read_for_avio TIMEOUT (15s), fill=%d finished=%d",
+                      __atomic_load_n(&ctx->ring_fill, __ATOMIC_ACQUIRE),
+                      __atomic_load_n(&ctx->ring_finished, __ATOMIC_ACQUIRE));
             return AVERROR_EOF;
+        }
         svcSleepThread(1000000LL); /* 1ms */
         waited++;
     }
