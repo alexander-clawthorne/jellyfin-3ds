@@ -1248,8 +1248,10 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                     (vid_active || state->now_playing_local_path[0]) &&
                     session->authenticated) {
                 bool with_subs = (kheld & KEY_ZL) != 0;
-                /* sub_idx: prefer current active track; -1 means "look up per-candidate" */
-                int  sub_idx   = with_subs ? state->subtitle_stream_index : -1;
+                /* sub_idx: prefer current active track; -1 forces per-candidate lookup.
+                 * Offline: subtitle_stream_index is stale, always force lookup. */
+                int sub_idx = (with_subs && !state->now_playing_offline)
+                              ? state->subtitle_stream_index : -1;
                 const char *sub_name = (with_subs && state->subtitle_lang_pref[0])
                                        ? state->subtitle_lang_pref : NULL;
 
