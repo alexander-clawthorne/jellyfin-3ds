@@ -717,6 +717,13 @@ static void decode_thread_func(void *arg)
     log_write("DEC: loop start");
     bool first_pkt = true;
     bool first_video_pkt = true;
+    /* Subtitle-burn streams open with an audio-only pre-roll while the
+     * server-side H.264 encoder initialises (subtitle filter startup).
+     * Skip audio packets until the first video IDR arrives — this lets
+     * the decode loop drain the pre-roll as fast as the ring delivers
+     * it instead of blocking on NDSP wave_buf availability. */
+    bool got_video    = false;
+    int  audio_skipped = 0;
     while (!s_vp.stop_requested) {
         bool is_video = false;
         int ret = demux_read_packet(&s_vp.demux, pkt, &is_video);
@@ -736,8 +743,10 @@ static void decode_thread_func(void *arg)
         if (is_video) {
             if (first_video_pkt) {
                 first_video_pkt = false;
-                log_write("DEC: first video pkt size=%d", pkt->size);
+                log_write("DEC: first video pkt size=%d (skipped %d audio pre-roll pkts)",
+                          pkt->size, audio_skipped);
             }
+            got_video = true;
             bool got_frame = mvd_decode_packet(&s_vp.mvd, pkt->data, pkt->size);
 
             /* Compute video PTS in seconds */
@@ -764,7 +773,15 @@ static void decode_thread_func(void *arg)
                 }
             }
         } else {
-            decode_audio_packet(pkt);
+            if (got_video) {
+                decode_audio_packet(pkt);
+            } else {
+                audio_skipped++;
+                if (audio_skipped == 1 || audio_skipped % 200 == 0)
+                    log_write("DEC: pre-roll skip=%d ring_fill=%d",
+                              audio_skipped,
+                              __atomic_load_n(&s_vp.demux.ring_fill, __ATOMIC_ACQUIRE));
+            }
         }
 
         av_packet_unref(pkt);
