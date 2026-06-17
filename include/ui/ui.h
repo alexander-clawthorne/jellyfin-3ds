@@ -51,6 +51,8 @@ typedef enum {
     VIEW_BROWSE,         /* browsing items within a library */
     VIEW_NOW_PLAYING,    /* audio playback screen */
     VIEW_SETTINGS,       /* settings / account / about */
+    VIEW_READER,         /* manga / comic page reader */
+    VIEW_DOWNLOADS,      /* manage downloaded files on SD card */
 } ui_view_t;
 
 /* ── UI State ────────────────────────────────────────────────────── */
@@ -92,6 +94,47 @@ typedef struct {
     /* Settings */
     int          settings_index;   /* cursor position in settings list */
     int          settings_scroll;  /* scroll offset */
+
+    /* Subtitle state */
+    int                  subtitle_stream_index; /* active stream index, -1 = off */
+    jfin_subtitle_list_t subtitle_list;         /* cached tracks for current item */
+    bool                 subtitle_list_loaded;  /* true when subtitle_list is valid */
+    bool                 subtitle_sticky;       /* carry language pref to next episode */
+    char                 subtitle_lang_pref[8]; /* ISO 639-2 language to match (e.g. "eng") */
+
+    /* Auto-retry state for subtitle transcode startup delay */
+    int                  video_retry_count;  /* retries attempted for current play (max 3) */
+    int                  video_retry_timer;  /* countdown frames before next retry */
+    int64_t              video_retry_ticks;  /* seek position to use on retry */
+
+    /* Manga / comic reader */
+    int                  reader_page;        /* current page index (0-based) */
+    bool                 reader_load_page;   /* page extraction pending (CBZ already open) */
+    bool                 reader_rotated;     /* SELECT: 90° CCW for landscape reading */
+    bool                 reader_split;       /* START: dual-screen page mode */
+    float                reader_zoom;        /* 1.0 = fit, > 1.0 = zoomed in */
+    float                reader_pan_x;       /* horizontal offset in pixels */
+    float                reader_pan_y;       /* vertical offset (split mode: scroll) */
+
+    /* Offline playback (downloaded local file) */
+    bool                 now_playing_offline;          /* true when playing from SD card */
+    char                 now_playing_local_path[192];  /* sdmc: path of the local .ts file */
+
+    /* Music playback mode */
+    bool  shuffle_mode;  /* pick random next track on auto-advance */
+    int   repeat_mode;   /* 0=off  1=repeat-one  2=repeat-all */
+
+    /* Temporary toast notification (shown for a few seconds) */
+    char                 np_toast[128];
+    int                  np_toast_timer;  /* frames remaining; 0 = hidden */
+
+    /* Downloads manager */
+    int                  downloads_scroll;
+    int                  downloads_index;
+    bool                 downloads_loaded;   /* true after directory has been scanned */
+    bool                 downloads_queue_focus;  /* true = navigating queue on top screen */
+    int                  downloads_queue_index;  /* selected queue item */
+    int                  downloads_name_offset;  /* char offset for scrolling long names */
 } ui_state_t;
 
 /* ── Lifecycle ───────────────────────────────────────────────────── */
@@ -127,6 +170,8 @@ void ui_render_libraries(const ui_state_t *state);
 void ui_render_browse(const ui_state_t *state);
 void ui_render_now_playing(const ui_state_t *state, const player_status_t *player);
 void ui_render_settings(const ui_state_t *state, const jfin_session_t *session);
+void ui_render_reader(const ui_state_t *state);
+void ui_render_downloads(const ui_state_t *state);
 
 /* ── Helpers ─────────────────────────────────────────────────────── */
 

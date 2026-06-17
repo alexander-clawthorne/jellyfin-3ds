@@ -25,6 +25,9 @@ extern "C" {
 #define JFIN_IMAGE_MAX_WIDTH  400  /* top screen width */
 #define JFIN_IMAGE_MAX_HEIGHT 240  /* top screen height */
 
+#define JFIN_MAX_SUBTITLES    10
+#define JFIN_SUBTITLE_TITLE   64
+
 /* ── Types ─────────────────────────────────────────────────────────── */
 
 typedef enum {
@@ -43,6 +46,7 @@ typedef enum {
     JFIN_ITEM_SERIES,
     JFIN_ITEM_SEASON,
     JFIN_ITEM_EPISODE,
+    JFIN_ITEM_BOOK,
     JFIN_ITEM_UNKNOWN
 } jfin_item_type_t;
 
@@ -52,9 +56,12 @@ typedef struct {
     char album[JFIN_MAX_NAME];       /* for audio tracks */
     char artist[JFIN_MAX_NAME];      /* for audio tracks / albums */
     char series_name[JFIN_MAX_NAME]; /* for episodes */
+    char parent_id[JFIN_MAX_ID];     /* parent folder/season/series id */
     jfin_item_type_t type;
     int  year;
     int  index_number;               /* track/episode number */
+    int  season_number;              /* parent season/volume number (episodes) */
+    int  page_count;                 /* page count for books */
     char album_id[JFIN_MAX_ID];      /* for album art fallback on audio tracks */
     int64_t runtime_ticks;           /* duration in 10M ticks */
     bool has_primary_image;
@@ -73,7 +80,6 @@ typedef struct {
     char url[JFIN_URL_BUF];          /* ready-to-fetch stream URL */
     char container[32];              /* "mp3", "opus", "ts", etc. */
     bool is_transcoding;
-    
 } jfin_stream_t;
 
 typedef struct {
@@ -84,6 +90,19 @@ typedef struct {
     char server_name[JFIN_MAX_NAME];
     bool authenticated;
 } jfin_session_t;
+
+typedef struct {
+    int  index;
+    char language[8];
+    char title[JFIN_SUBTITLE_TITLE];
+    bool is_default;
+    bool is_forced;
+} jfin_subtitle_t;
+
+typedef struct {
+    jfin_subtitle_t subs[JFIN_MAX_SUBTITLES];
+    int count;
+} jfin_subtitle_list_t;
 
 /* ── Lifecycle ─────────────────────────────────────────────────────── */
 
@@ -158,6 +177,19 @@ bool jfin_get_latest(const jfin_session_t *session, const char *parent_id,
 bool jfin_search(const jfin_session_t *session, const char *query,
                  int limit, jfin_item_list_t *out);
 
+/**
+ * Fetch the parent_id of a single item by its id.
+ */
+bool jfin_get_item_parent_id(const jfin_session_t *session, const char *item_id,
+                              char *parent_id_out, int out_len);
+
+/**
+ * Get all direct children of parent_id sorted by IndexNumber.
+ * Used to find adjacent episodes for "queue next" downloads.
+ */
+bool jfin_get_siblings(const jfin_session_t *session, const char *parent_id,
+                       int limit, jfin_item_list_t *out);
+
 /* ── Streaming ─────────────────────────────────────────────────────── */
 
 /**
@@ -168,12 +200,21 @@ bool jfin_get_audio_stream(const jfin_session_t *session, const char *item_id,
 
 /**
  * Get a video stream URL. start_ticks = 0 for beginning, or seek position.
+ * subtitle_stream_index: pass >= 0 to burn in subtitles via server-side
+ * transcode (&SubtitleStreamIndex=N&SubtitleMethod=Encode); -1 = no subs.
  */
 bool jfin_get_video_stream(const jfin_session_t *session, const char *item_id,
                            int64_t start_ticks, bool is_3d,
+                           int subtitle_stream_index,
                            jfin_stream_t *out);
 
-
+/**
+ * Fetch the list of subtitle tracks available for item_id.
+ * Populates out->subs[] with language, title, index, default/forced flags.
+ * Returns false (and leaves out empty) if the item has no subtitle streams.
+ */
+bool jfin_get_subtitle_streams(const jfin_session_t *session, const char *item_id,
+                               jfin_subtitle_list_t *out);
 
 /* ── Images ────────────────────────────────────────────────────────── */
 
