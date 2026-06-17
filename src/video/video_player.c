@@ -571,15 +571,27 @@ static void decode_audio_packet(AVPacket *pkt)
         /* Find a free NDSP buffer */
         ndspWaveBuf *wbuf = &s_vp.wave_bufs[s_vp.audio_buf_idx];
 
-        /* Wait for buffer to be free. No timeout here: while paused this
-         * legitimately takes arbitrarily long, and proceeding anyway would
-         * resubmit a buffer NDSP still owns (queue corruption). Stop breaks
-         * the wait. */
+        /* Wait for buffer to be free. 500ms timeout prevents the decode
+         * thread from blocking indefinitely when NDSP hasn't drained yet
+         * (e.g. subtitle-burn streams open with a long run of audio-only
+         * packets that fill all 4 wave_bufs before NDSP can play any).
+         * On timeout we drop this audio frame so the loop can reach the
+         * first video packet; NDSP catches up once playback establishes.
+         * During a genuine pause the wait loop re-evaluates every 1ms so
+         * stop_requested still breaks it promptly. */
+        int _wbuf_wait = 0;
         while ((wbuf->status == NDSP_WBUF_QUEUED || wbuf->status == NDSP_WBUF_PLAYING)
-               && !s_vp.stop_requested) {
+               && !s_vp.stop_requested && _wbuf_wait < 500) {
             svcSleepThread(1000000LL);
+            _wbuf_wait++;
         }
         if (s_vp.stop_requested) break;
+        if (_wbuf_wait >= 500) {
+            log_write("AUDIO: wbuf[%d] 500ms timeout, dropping frame (status=%d)",
+                      s_vp.audio_buf_idx, (int)wbuf->status);
+            s_vp.audio_buf_idx = (s_vp.audio_buf_idx + 1) % NUM_AUDIO_BUFS;
+            break;
+        }
 
         /* Convert to s16 stereo */
         int out_samples = swr_convert(s_vp.swr_ctx,
@@ -704,6 +716,7 @@ static void decode_thread_func(void *arg)
 
     log_write("DEC: loop start");
     bool first_pkt = true;
+    bool first_video_pkt = true;
     while (!s_vp.stop_requested) {
         bool is_video = false;
         int ret = demux_read_packet(&s_vp.demux, pkt, &is_video);
@@ -721,6 +734,10 @@ static void decode_thread_func(void *arg)
         }
 
         if (is_video) {
+            if (first_video_pkt) {
+                first_video_pkt = false;
+                log_write("DEC: first video pkt size=%d", pkt->size);
+            }
             bool got_frame = mvd_decode_packet(&s_vp.mvd, pkt->data, pkt->size);
 
             /* Compute video PTS in seconds */
