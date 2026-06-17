@@ -80,6 +80,7 @@ typedef struct {
     char url[JFIN_URL_BUF];          /* ready-to-fetch stream URL */
     char container[32];              /* "mp3", "opus", "ts", etc. */
     bool is_transcoding;
+    char subtitle_url[JFIN_URL_BUF]; /* ASS subtitle download URL, empty = none */
 } jfin_stream_t;
 
 typedef struct {
@@ -200,8 +201,9 @@ bool jfin_get_audio_stream(const jfin_session_t *session, const char *item_id,
 
 /**
  * Get a video stream URL. start_ticks = 0 for beginning, or seek position.
- * subtitle_stream_index: pass >= 0 to burn in subtitles via server-side
- * transcode (&SubtitleStreamIndex=N&SubtitleMethod=Encode); -1 = no subs.
+ * subtitle_stream_index: pass >= 0 to enable client-side subtitle rendering;
+ * out->subtitle_url is populated with the ASS download URL. Pass -1 for none.
+ * Subtitles are NOT burned into the video stream (no SubtitleMethod=Encode).
  */
 bool jfin_get_video_stream(const jfin_session_t *session, const char *item_id,
                            int64_t start_ticks, bool is_3d,

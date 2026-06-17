@@ -612,10 +612,11 @@ bool jfin_get_video_stream(const jfin_session_t *session, const char *item_id,
                   (long long)start_ticks, (unsigned long)(tick & 0xFFFFFFFF));
     }
 
-    if (subtitle_stream_index >= 0 && len > 0 && len < (int)sizeof(out->url) - 48)
-        snprintf(out->url + len, sizeof(out->url) - len,
-                 "&SubtitleStreamIndex=%d&SubtitleMethod=Encode",
-                 subtitle_stream_index);
+    if (subtitle_stream_index >= 0)
+        snprintf(out->subtitle_url, sizeof(out->subtitle_url),
+                 "%s/Videos/%s/%s/Subtitles/%d/0/Stream.ass?api_key=%s",
+                 session->server_url, item_id, item_id,
+                 subtitle_stream_index, session->access_token);
 
     snprintf(out->container, sizeof(out->container), "%s", "ts");
     out->is_transcoding = true;
