@@ -626,6 +626,45 @@ bool jfin_get_video_stream(const jfin_session_t *session, const char *item_id,
     return true;
 }
 
+bool jfin_get_video_stream_encoded(const jfin_session_t *session, const char *item_id,
+                                   int subtitle_stream_index,
+                                   jfin_stream_t *out)
+{
+    memset(out, 0, sizeof(*out));
+    if (subtitle_stream_index < 0) return false;
+
+    u64 tick = svcGetSystemTick();
+    snprintf(out->url, sizeof(out->url),
+             "%s/Videos/%s/stream?UserId=%s&DeviceId=%s"
+             "&VideoCodec=h264"
+             "&AudioCodec=aac"
+             "&Container=ts"
+             "&MaxWidth=400&MaxHeight=240"
+             "&VideoBitRate=%d"
+             "&AudioBitRate=%d"
+             "&MaxAudioChannels=2"
+             "&TranscodingMaxAudioChannels=2"
+             "&Profile=Baseline"
+             "&Level=31"
+             "&MaxRefFrames=2"
+             "&MediaSourceId=%s"
+             "&PlaySessionId=3ds%08lx"
+             "&api_key=%s"
+             "&StartTimeTicks=1"
+             "&SubtitleStreamIndex=%d"
+             "&SubtitleMethod=Encode",
+             session->server_url, item_id, session->user_id,
+             session->device_id,
+             g_config.video_bitrate * 1000, g_config.audio_bitrate * 1000,
+             item_id, (unsigned long)(tick & 0xFFFFFFFF), session->access_token,
+             subtitle_stream_index);
+
+    snprintf(out->container, sizeof(out->container), "%s", "ts");
+    out->is_transcoding = true;
+    /* subtitle_url intentionally empty — subtitles are baked into the stream */
+    return true;
+}
+
 bool jfin_get_subtitle_streams(const jfin_session_t *session, const char *item_id,
                                jfin_subtitle_list_t *out)
 {

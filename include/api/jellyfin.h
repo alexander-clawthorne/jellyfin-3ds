@@ -215,6 +215,17 @@ bool jfin_get_video_stream(const jfin_session_t *session, const char *item_id,
                            jfin_stream_t *out);
 
 /**
+ * Get a video stream URL with subtitles burned into the transcode (hardcoded).
+ * subtitle_stream_index must be >= 0; returns false otherwise.
+ * Appends SubtitleStreamIndex + SubtitleMethod=Encode and forces StartTimeTicks=1
+ * to prevent Jellyfin from falling back to a direct stream (which ignores encode).
+ * out->subtitle_url is always empty — subtitles are baked into the video stream.
+ */
+bool jfin_get_video_stream_encoded(const jfin_session_t *session, const char *item_id,
+                                   int subtitle_stream_index,
+                                   jfin_stream_t *out);
+
+/**
  * Fetch the list of subtitle tracks available for item_id.
  * Populates out->subs[] with language, title, index, default/forced flags.
  * Returns false (and leaves out empty) if the item has no subtitle streams.
