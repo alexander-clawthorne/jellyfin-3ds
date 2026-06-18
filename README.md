@@ -9,7 +9,7 @@ Native Jellyfin media client for Nintendo 3DS. Stream music and video, read mang
 ### Streaming
 - **Music** — browse artists, albums, and tracks; MP3/AAC playback with album art; shuffle and repeat modes; ZL/ZR to skip tracks
 - **Video** — H.264 hardware decode at up to 24fps on New 3DS (400×240); Old 3DS supports audio only
-- **Subtitles** — select any subtitle track; burned server-side into the stream; preference sticks across episodes automatically
+- **Subtitles** — select any subtitle track; rendered client-side during playback; preference sticks across episodes automatically
 
 ### Manga / CBZ Reader
 - **Page reader** — download and read CBZ archives directly on device
