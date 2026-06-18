@@ -613,8 +613,8 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 if (state->scroll_offset < 0) { state->scroll_offset = 0; state->scroll_velocity = 0; }
             }
         }
-        /* A to enter / play */
-        if (kdown & KEY_A) {
+        /* A to enter / play (skip if ZL held — ZL+A is encoded-sub download) */
+        if ((kdown & KEY_A) && !(kheld & KEY_ZL)) {
             if (state->selected_index < state->items.count) {
                 jfin_item_t *item = &state->items.items[state->selected_index];
                 bool is_playable = (item->type == JFIN_ITEM_AUDIO ||
@@ -895,6 +895,56 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 }
             }
         }
+        /* ZL+A: download selected video with subtitles burned into the transcode */
+        if ((kdown & KEY_A) && (kheld & KEY_ZL)
+                && state->selected_index < state->items.count
+                && session->authenticated) {
+            jfin_item_t *item = &state->items.items[state->selected_index];
+            if (item->type == JFIN_ITEM_EPISODE || item->type == JFIN_ITEM_MOVIE) {
+                int sub_idx = -1;
+                char sub_lang[8] = "";
+                if (state->subtitle_list_loaded && state->subtitle_list.count > 0) {
+                    sub_idx = state->subtitle_list.subs[0].index;
+                    strncpy(sub_lang, state->subtitle_list.subs[0].language, 7);
+                } else {
+                    jfin_subtitle_list_t tmp_subs;
+                    if (jfin_get_subtitle_streams(session, item->id, &tmp_subs)
+                            && tmp_subs.count > 0) {
+                        sub_idx = tmp_subs.subs[0].index;
+                        strncpy(sub_lang, tmp_subs.subs[0].language, 7);
+                    }
+                }
+                if (sub_idx >= 0) {
+                    jfin_stream_t enc_stream;
+                    if (jfin_get_video_stream_encoded(session, item->id, sub_idx, &enc_stream)) {
+                        char dl_name[256];
+                        if (item->type == JFIN_ITEM_EPISODE) {
+                            char series_part[80] = "";
+                            if (item->series_name[0])
+                                snprintf(series_part, sizeof(series_part), "%s / ", item->series_name);
+                            else if (state->parent_depth >= 2)
+                                snprintf(series_part, sizeof(series_part), "%s / ",
+                                         state->parent_stack_names[state->parent_depth - 2]);
+                            char season_part[64] = "";
+                            if (state->parent_depth >= 1)
+                                snprintf(season_part, sizeof(season_part), "%s / ",
+                                         state->parent_stack_names[state->parent_depth - 1]);
+                            if (item->index_number > 0)
+                                snprintf(dl_name, sizeof(dl_name), "%s%sE%02d - %s",
+                                         series_part, season_part, item->index_number, item->name);
+                            else
+                                snprintf(dl_name, sizeof(dl_name), "%s%s%s",
+                                         series_part, season_part, item->name);
+                        } else {
+                            snprintf(dl_name, sizeof(dl_name), "%s", item->name);
+                        }
+                        dl_queue_video(item->id, dl_name, enc_stream.url, sub_lang,
+                                       "", item->runtime_ticks);
+                        log_write("UI: queued encoded-sub dl for %s (%s)", item->id, sub_lang);
+                    }
+                }
+            }
+        }
         /* Y to toggle now-playing view */
         if ((kdown & KEY_Y) && !(kheld & KEY_ZL) && state->has_now_playing) {
             state->previous_view = state->current_view;
@@ -1077,8 +1127,8 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 state->bottom_hidden = true;
                 break;
             }
-            /* A to pause/resume */
-            if (kdown & KEY_A) {
+            /* A to pause/resume (skip if ZL held — ZL+A is encoded-sub download) */
+            if ((kdown & KEY_A) && !(kheld & KEY_ZL)) {
                 if (vid_active)
                     video_player_pause();
                 else
@@ -1398,6 +1448,105 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                         }
                     }
                 }
+            }
+            /* ZL+A (now-playing): download next episode with subtitles burned in */
+            if ((kdown & KEY_A) && (kheld & KEY_ZL) && state->has_now_playing &&
+                    (vid_active || state->now_playing_local_path[0]) &&
+                    session->authenticated) {
+
+#define TRY_QUEUE_NEXT_ENC(list_ptr, _mc, start_i)                                \
+    do {                                                                           \
+        for (int _i = (start_i); _i < (_mc); _i++) {                              \
+            jfin_item_t *cand = &(list_ptr)[_i];                                   \
+            if (cand->type != JFIN_ITEM_EPISODE &&                                 \
+                cand->type != JFIN_ITEM_MOVIE) continue;                           \
+            bool already = cache_has(cand->id, "ts") ||                            \
+                           dl_queue_has_video(cand->id);                           \
+            if (already) continue;                                                 \
+            int _eff_sub = -1;                                                     \
+            char _eff_lang[8] = {0};                                               \
+            jfin_subtitle_list_t _csl;                                             \
+            if (jfin_get_subtitle_streams(session, cand->id, &_csl) &&            \
+                    _csl.count > 0) {                                               \
+                _eff_sub = _csl.subs[0].index;                                     \
+                strncpy(_eff_lang, _csl.subs[0].language, 7);                      \
+            }                                                                       \
+            if (_eff_sub < 0) break;                                                \
+            jfin_stream_t xstream;                                                 \
+            if (jfin_get_video_stream_encoded(session, cand->id,                   \
+                                              _eff_sub, &xstream)) {               \
+                char xname[256];                                                   \
+                if (cand->series_name[0] && cand->season_number > 0)               \
+                    snprintf(xname, sizeof(xname), "%s / Season %d / E%02d - %s", \
+                             cand->series_name, cand->season_number,               \
+                             cand->index_number, cand->name);                      \
+                else if (cand->series_name[0])                                     \
+                    snprintf(xname, sizeof(xname), "%s / E%02d - %s",             \
+                             cand->series_name, cand->index_number, cand->name);   \
+                else snprintf(xname, sizeof(xname), "%s", cand->name);            \
+                dl_queue_video(cand->id, xname, xstream.url, _eff_lang,           \
+                               "", cand->runtime_ticks);                           \
+                if (cand->index_number > 0)                                        \
+                    snprintf(state->np_toast, sizeof(state->np_toast),             \
+                             "DL+enc: E%02d - %s",                                 \
+                             cand->index_number, cand->name);                      \
+                else snprintf(state->np_toast, sizeof(state->np_toast),            \
+                              "DL+enc: %s", cand->name);                           \
+                state->np_toast_timer = 150;                                       \
+            }                                                                      \
+            break;                                                                 \
+        }                                                                          \
+    } while (0)
+
+                if (!state->now_playing_offline && state->playing_index >= 0) {
+                    int _prev_toast = state->np_toast_timer;
+                    TRY_QUEUE_NEXT_ENC(state->items.items, state->items.count,
+                                       state->playing_index + 1);
+                    if (state->np_toast_timer == _prev_toast &&
+                        state->items.total_count >
+                        state->items.start_index + state->items.count) {
+                        const char *_pg_pid = (state->parent_depth > 0)
+                            ? state->parent_stack_ids[state->parent_depth - 1] : NULL;
+                        if (_pg_pid) {
+                            static jfin_item_list_t s_a_overflow;
+                            int _pg_start = state->items.start_index + state->items.count;
+                            if (jfin_get_items(session, _pg_pid, _pg_start,
+                                               JFIN_MAX_ITEMS, &s_a_overflow))
+                                TRY_QUEUE_NEXT_ENC(s_a_overflow.items, s_a_overflow.count, 0);
+                        }
+                    }
+                } else {
+                    char xparent[JFIN_MAX_ID] = {0};
+                    if (state->now_playing.parent_id[0])
+                        strncpy(xparent, state->now_playing.parent_id, sizeof(xparent)-1);
+                    else if (state->now_playing.id[0])
+                        jfin_get_item_parent_id(session, state->now_playing.id,
+                                                xparent, sizeof(xparent));
+                    if (xparent[0]) {
+                        static jfin_item_list_t s_a_sibs;
+                        int sib_start = state->now_playing.index_number > 1
+                                        ? state->now_playing.index_number - 1 : 0;
+                        if (jfin_get_siblings(session, xparent, sib_start,
+                                              JFIN_MAX_ITEMS, &s_a_sibs)) {
+                            int cur_pos = -1;
+                            for (int si = 0; si < s_a_sibs.count; si++) {
+                                if (strcmp(s_a_sibs.items[si].id,
+                                           state->now_playing.id) == 0)
+                                    { cur_pos = si; break; }
+                            }
+                            if (cur_pos < 0 && state->now_playing.index_number > 0) {
+                                for (int si = 0; si < s_a_sibs.count; si++) {
+                                    if (s_a_sibs.items[si].index_number ==
+                                            state->now_playing.index_number)
+                                        { cur_pos = si; break; }
+                                }
+                            }
+                            TRY_QUEUE_NEXT_ENC(s_a_sibs.items, s_a_sibs.count,
+                                               cur_pos >= 0 ? cur_pos + 1 : 0);
+                        }
+                    }
+                }
+#undef TRY_QUEUE_NEXT_ENC
             }
             /* B: back to browse, keep playing */
             if (kdown & KEY_B) {
@@ -2086,7 +2235,7 @@ void ui_render_browse(const ui_state_t *state)
                       "A:Sel  B:Back  L/R:Pg  SEL:Search");
         else if (sel_dl)
             draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
-                      "A:Play  X:DL  ZL+X:DL+Sub  ZL+Y:DL Sub  B:Back");
+                      "A:Play  X:DL  ZL+X:DL+Sub  ZL+Y:Sub  ZL+A:DL+Enc  B:Back");
         else
             draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
                       "A:Select  B:Back  SEL:Search");
@@ -2299,7 +2448,7 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
             : "A:Pause B:Back STR:Stop L/R:Seek Y:Subs";
         draw_text(10, 177, 0.4f, rgba(COLOR_TEXT_PRIMARY), line1);
         draw_text(10, 191, 0.4f, rgba(COLOR_TEXT_PRIMARY),
-                  "X:DLnxt  ZL+X:DL+sub  ZL+Y:DLsub");
+                  "X:DLnxt  ZL+X:DL+sub  ZL+Y:DLsub  ZL+A:DL+enc");
     }
 }
 
