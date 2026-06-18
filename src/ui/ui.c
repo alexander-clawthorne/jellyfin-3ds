@@ -1298,8 +1298,8 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             /* Y (audio): toggle shuffle */
             if ((kdown & KEY_Y) && !vid_active)
                 state->shuffle_mode = !state->shuffle_mode;
-            /* ZL+SELECT: open shutdown timer popup */
-            if ((kdown & KEY_SELECT) && (kheld & KEY_ZL)) {
+            /* ZR+SELECT: open shutdown timer popup */
+            if ((kdown & KEY_SELECT) && (kheld & KEY_ZR)) {
                 state->shutdown_popup_open = true;
                 state->shutdown_popup_sel  = 1;
                 break;
@@ -2480,7 +2480,7 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
         draw_text(10, 180, 0.4f, rgba(COLOR_TEXT_PRIMARY),
                   "A:Pause B:Back STR:Stop ZL/ZR:Skip Y:Shuf SEL:Rep");
         draw_text(10, 193, 0.4f, rgba(COLOR_TEXT_SECONDARY),
-                  "ZR+START:Off  ZL+SEL:Timer");
+                  "ZR+START:Off  ZR+SEL:Timer");
     } else {
         const char *line1 = state->now_playing_offline
             ? "A:Pause B:Back STR:Stop L/R:Seek Y:sub"
@@ -2489,7 +2489,7 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
         draw_text(10, 191, 0.4f, rgba(COLOR_TEXT_PRIMARY),
                   "X:DLnxt  ZL+X:DL+sub  ZL+Y:DLsub  ZL+A:DL+enc");
         draw_text(10, 205, 0.4f, rgba(COLOR_TEXT_SECONDARY),
-                  "ZR+START:Off  ZL+SEL:Timer");
+                  "ZR+START:Off  ZR+SEL:Timer");
     }
 
     /* Shutdown timer countdown (bottom-right) */
