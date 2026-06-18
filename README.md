@@ -15,11 +15,15 @@ Native Jellyfin media client for Nintendo 3DS. Stream music and video, read mang
 - **Downloads** — queue video (with optional subtitle), audio, and CBZ files to SD card
 - **Download next** — press X while watching to queue the next undownloaded episode automatically
 - **Download with subtitles** — press ZL+X while watching to queue the next episode with the active subtitle track burned in
+- **Download subtitle file** — press ZL+Y to download just the .ass subtitle for the current or selected episode
+- **Encoded subtitle download** — press ZL+A to download with subtitles burned into the encoded stream
 - **Download progress** — live speed, estimated file size, progress bar, and ETA on the downloads screen
 - **Downloads manager** — browse (grouped by series/season), open, and delete downloaded files; color-coded by type
 - **Library browsing** — navigate all Jellyfin libraries with pagination and search
 - **Auto-play** — next track or episode plays automatically; shuffle for music
 - **Session persistence** — login once, credentials saved to SD card
+- **Instant shutdown** — ZR+START powers off the 3DS from any screen
+- **Sleep timer** — ZR+SELECT opens a shutdown timer popup; set HH:MM:SS and the console powers off automatically
 - **Background theme** — Dark / Black / White / Grey selectable in settings
 
 ## Requirements
@@ -43,6 +47,15 @@ Downloaded files are saved to `sdmc:/3ds/jellyfin-3ds/`.
 
 Controls change based on the current screen. **START exits the app from every screen except Now Playing and the Manga Reader.**
 
+### Global (any screen)
+
+| Button | Action |
+|--------|--------|
+| ZR + START | Instantly power off the 3DS |
+| ZR + SELECT | Open shutdown sleep timer popup |
+
+The sleep timer popup lets you set hours, minutes, and seconds (default 00:05:00). Use D-pad Left/Right to move between fields, D-pad Up/Down to change the value, A to start the countdown, and B to cancel. While active, the remaining time is shown in the bottom-right corner of the bottom screen.
+
 ### Login
 
 | Button | Action |
@@ -57,10 +70,12 @@ Controls change based on the current screen. **START exits the app from every sc
 |--------|--------|
 | D-pad Up/Down (hold) | Move cursor / continuous scroll |
 | A | Enter folder / Play media |
+| ZL + A | Download selected video with subtitles burned into encoded stream |
 | B | Go back |
 | X | Download item to SD card (video, audio, CBZ, or whole album) |
-| ZL + X | Download video with subtitle burned in |
+| ZL + X | Download selected video with first available subtitle burned in |
 | Y | Select subtitle track for next video playback or download |
+| ZL + Y | Download just the subtitle (.ass) file for the selected video |
 | L / R | Previous / next page |
 | SELECT | Search across all libraries (Browse) / Settings (Libraries) |
 | Touch | Tap to select, drag to scroll |
@@ -79,6 +94,8 @@ Items that have already been downloaded show a **[D]** badge.
 | SELECT | Cycle repeat (Off → Repeat One → Repeat All) |
 | ZL | Previous track (New 3DS only) |
 | ZR | Next track (New 3DS only) |
+| ZR + START | Power off the 3DS |
+| ZR + SELECT | Open shutdown sleep timer |
 | L / R | Seek −30 / +30 seconds |
 | D-pad Down | Watch mode (hide bottom screen) |
 | D-pad Up | Exit watch mode |
@@ -93,6 +110,10 @@ Items that have already been downloaded show a **[D]** badge.
 | Y | Cycle subtitle tracks |
 | X | Queue download of next undownloaded episode |
 | ZL + X | Queue next episode download with current subtitle burned in |
+| ZL + Y | Download subtitle .ass file for the current episode |
+| ZL + A | Queue next episode download with subtitles burned into encoded stream |
+| ZR + START | Power off the 3DS |
+| ZR + SELECT | Open shutdown sleep timer |
 | L / R | Seek −15 / +30 seconds |
 | D-pad Down | Watch mode (hide controls) |
 | D-pad Up | Exit watch mode |
@@ -107,6 +128,8 @@ A brief toast notification ("DL: E04 - Episode Title") appears when a download i
 | B | Back to browse (keeps playing) |
 | START | Stop playback and exit |
 | X | Queue download of next undownloaded episode (requires internet) |
+| ZR + START | Power off the 3DS |
+| ZR + SELECT | Open shutdown sleep timer |
 | L / R | Seek −15 / +30 seconds |
 | D-pad Down | Watch mode |
 | D-pad Up | Exit watch mode |
@@ -184,7 +207,16 @@ Credentials are saved to `sdmc:/3ds/jellyfin-3ds/config.ini` and restored on nex
 ## Downloading Content
 
 ### Videos
-Press **X** on any movie or episode in the browse view, or **X** while watching to queue the next undownloaded episode. If a subtitle track is selected (via **Y**), it is burned into the video server-side — no separate subtitle file is needed. Press **ZL+X** while watching to queue the next episode with the current subtitle track automatically applied.
+
+Press **X** on any movie or episode in the browse view, or **X** while watching to queue the next undownloaded episode.
+
+**Subtitle options when downloading:**
+
+| Combo | Where | What it does |
+|-------|-------|--------------|
+| ZL + X | Browse or Now Playing | Burns the selected/first subtitle into the transcoded video |
+| ZL + A | Browse or Now Playing | Burns subtitles using the encoded stream (alternative transcode path) |
+| ZL + Y | Browse or Now Playing | Downloads just the raw .ass subtitle file separately |
 
 A `.txt` companion file with the item title is saved alongside each `.ts` video file.
 
