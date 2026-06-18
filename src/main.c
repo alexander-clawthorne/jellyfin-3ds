@@ -105,6 +105,7 @@ int main(int argc, char *argv[])
     s_ui.auto_advance  = g_config.auto_advance;
     s_ui.reader_zoom   = 1.0f;
     s_ui.subtitle_stream_index = -1;   /* no subtitles by default */
+    s_ui.shutdown_popup_m = 5;         /* default timer: 00:05:00 */
 
     if (try_auto_login()) {
         s_ui.current_view = VIEW_LIBRARIES;
@@ -132,6 +133,17 @@ int main(int argc, char *argv[])
         u32 kheld = hidKeysHeld();
         touchPosition touch;
         hidTouchRead(&touch);
+
+        /* Shutdown timer countdown */
+        if (s_ui.shutdown_timer_active) {
+            u64 now = osGetTime();
+            if (now >= s_ui.shutdown_timer_deadline) {
+                ptmSysmInit();
+                PTMSYSM_ShutdownAsync(0);
+                ptmSysmExit();
+                break;
+            }
+        }
 
         /* ZR+START: shut down the 3DS from any view */
         if ((kheld & KEY_ZR) && (kdown & KEY_START)) {
