@@ -1,7 +1,7 @@
-# Stereoscopic 3D Video — Implementation Plan
+# Stereoscopic 3D Video
 
-> Date: 2026-03-30
-> Status: **Implemented** (HSBS + FSBS; pending hardware verification — see test plan below)
+> Date: 2026-03-30 · Last updated: 2026-06-18
+> Status: **Implemented** — HSBS and FSBS working; HalfTopAndBottom (HTAB) not yet rendered in 3D
 > Test content: "Peace World 3D SBS Test" (1280x720 HalfSideBySide, 60s) in Jellyfin library
 
 ## Overview
