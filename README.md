@@ -6,25 +6,37 @@ Native Jellyfin media client for Nintendo 3DS. Stream music and video, read mang
 
 ## Features
 
-- **Music streaming** — browse artists, albums, tracks; MP3/AAC with album art; ZL/ZR track skip
-- **Video streaming** — H.264 hardware decode at 24fps on New 3DS (400×224)
-- **Subtitles** — select any subtitle track; burned in server-side; sticky across episodes
-- **Manga / CBZ reader** — download and read CBZ archives page by page
-- **Split-screen reader** — page spans both screens simultaneously (480px combined height)
-- **Zoom and pan** — pinch-zoom equivalent via circle pad in reader
-- **Downloads** — queue video (with optional subtitle), audio, and CBZ files to SD card
-- **Download next** — press X while watching to queue the next undownloaded episode automatically
-- **Download with subtitles** — press ZL+X while watching to queue the next episode with the active subtitle track burned in
-- **Download subtitle file** — press ZL+Y to download just the .ass subtitle for the current or selected episode
-- **Encoded subtitle download** — press ZL+A to download with subtitles burned into the encoded stream
-- **Download progress** — live speed, estimated file size, progress bar, and ETA on the downloads screen
-- **Downloads manager** — browse (grouped by series/season), open, and delete downloaded files; color-coded by type
+### Streaming
+- **Music** — browse artists, albums, and tracks; MP3/AAC playback with album art; shuffle and repeat modes; ZL/ZR to skip tracks
+- **Video** — H.264 hardware decode at up to 24fps on New 3DS (400×240); Old 3DS supports audio only
+- **Subtitles** — select any subtitle track; burned server-side into the stream; preference sticks across episodes automatically
+
+### Manga / CBZ Reader
+- **Page reader** — download and read CBZ archives directly on device
+- **Split-screen mode** — page spans both screens simultaneously (480px combined height) for a taller view
+- **Zoom & pan** — zoom in/out with D-pad Up/Down; pan with the circle pad
+
+### Downloads
+- **Download to SD** — queue video, audio, and CBZ files to your SD card from browse or while watching
+  - **X** — download selected item, or queue the next episode while watching
+  - **ZL + X** — download with subtitle burned into the transcoded video
+  - **ZL + A** — download with subtitle burned into the encoded stream (alternative method)
+  - **ZL + Y** — download just the .ass subtitle file separately
+- **Progress tracking** — live speed, estimated file size, progress bar, and ETA in the downloads manager
+- **Downloads manager** — browse completed files by series/season, open them directly, or delete; color-coded by type (video / audio / CBZ)
+
+### Library & Navigation
 - **Library browsing** — navigate all Jellyfin libraries with pagination and search
-- **Auto-play** — next track or episode plays automatically; shuffle for music
-- **Session persistence** — login once, credentials saved to SD card
-- **Instant shutdown** — ZR+START powers off the 3DS from any screen
-- **Sleep timer** — ZR+SELECT opens a shutdown timer popup; set HH:MM:SS and the console powers off automatically
-- **Background theme** — Dark / Black / White / Grey selectable in settings
+- **Auto-play** — next episode or track starts automatically; shuffle mode for music
+- **Session persistence** — login once; credentials saved to SD card and restored on next launch
+
+### Power Management
+- **Instant shutdown** — ZR+START powers off the 3DS from any screen at any time
+- **Sleep timer** — ZR+SELECT (from Now Playing) opens a HH:MM:SS countdown popup; console shuts down automatically when it fires, even if you navigate away
+
+### Settings
+- **Themes** — Dark / Black / White / Grey background
+- **Bitrates** — configurable audio (64–320 kbps) and video (500K–8000K) bitrates
 
 ## Requirements
 
@@ -45,38 +57,33 @@ Downloaded files are saved to `sdmc:/3ds/jellyfin-3ds/`.
 
 ## Controls
 
-Controls change based on the current screen. **START exits the app from every screen except Now Playing and the Manga Reader.**
-
-### Global (any screen)
-
-| Button | Action |
-|--------|--------|
-| ZR + START | Instantly power off the 3DS |
+Controls change based on the current screen. **ZR+START powers off the 3DS from any screen. START exits the app from menu screens (not Now Playing or Manga Reader).**
 
 ### Login
 
 | Button | Action |
 |--------|--------|
-| D-pad Up/Down | Move between fields (URL / Username / Password) |
-| A or R | Connect |
-| Touch | Tap field to select, use on-screen keyboard |
+| A / R | Connect |
+| D-pad Up / Down | Move between fields (URL / Username / Password) |
+| Touch | Tap a field to select it; use the on-screen keyboard to type |
 
 ### Browse (libraries & item lists)
 
 | Button | Action |
 |--------|--------|
-| D-pad Up/Down (hold) | Move cursor / continuous scroll |
-| A | Enter folder / Play media |
-| ZL + A | Download selected video with subtitles burned into encoded stream |
+| A | Enter folder / play media |
 | B | Go back |
 | X | Download item to SD card (video, audio, CBZ, or whole album) |
-| ZL + X | Download selected video with first available subtitle burned in |
-| Y | Select subtitle track for next video playback or download |
+| Y | Select subtitle track for next playback or download |
+| ZL + A | Download selected video — subtitles burned in (encoded stream) |
+| ZL + X | Download selected video — subtitle burned in (transcoded) |
 | ZL + Y | Download just the subtitle (.ass) file for the selected video |
+| ZR + START | Power off the 3DS |
 | L / R | Previous / next page |
-| SELECT | Search across all libraries (Browse) / Settings (Libraries) |
-| Touch | Tap to select, drag to scroll |
+| D-pad Up / Down | Move cursor (hold to scroll continuously) |
+| SELECT | Search all libraries (Browse) / Open settings (Libraries) |
 | START | Exit app |
+| Touch | Tap to select; drag to scroll |
 
 Items that have already been downloaded show a **[D]** badge.
 
@@ -85,55 +92,55 @@ Items that have already been downloaded show a **[D]** badge.
 | Button | Action |
 |--------|--------|
 | A | Pause / Resume |
-| B | Back to browse (keeps playing) |
-| START | Stop playback and exit |
+| B | Back to browse (playback continues) |
 | Y | Toggle shuffle |
-| SELECT | Cycle repeat (Off → Repeat One → Repeat All) |
-| ZL | Previous track (New 3DS only) |
-| ZR | Next track (New 3DS only) |
+| ZL | Previous track *(New 3DS only)* |
+| ZR | Next track *(New 3DS only)* |
 | ZR + START | Power off the 3DS |
 | ZR + SELECT | Open shutdown sleep timer |
 | L / R | Seek −30 / +30 seconds |
-| D-pad Down | Watch mode (hide bottom screen) |
 | D-pad Up | Exit watch mode |
+| D-pad Down | Watch mode (hide bottom screen) |
+| SELECT | Cycle repeat: Off → Repeat One → Repeat All |
+| START | Stop and exit |
 
-The sleep timer popup lets you set hours, minutes, and seconds (default 00:05:00). D-pad Left/Right moves between fields, D-pad Up/Down changes the value, A starts the countdown, B cancels. Once active, the remaining time is shown in the bottom-right corner and the console powers off automatically when it reaches zero — even if you leave Now Playing.
+**Sleep timer:** ZR+SELECT opens a popup — D-pad Left/Right to move between H/M/S fields, D-pad Up/Down to change the value, A to start, B to cancel. Default is 00:05:00. Once active the remaining time shows in the bottom-right corner; the console shuts down when it hits zero, even if you've left Now Playing.
 
 ### Now Playing — Video (online)
 
 | Button | Action |
 |--------|--------|
 | A | Pause / Resume |
-| B | Back to browse (keeps playing) |
-| START | Stop playback and exit |
+| B | Back to browse (playback continues) |
+| X | Queue next undownloaded episode |
 | Y | Cycle subtitle tracks |
-| X | Queue download of next undownloaded episode |
-| ZL + X | Queue next episode download with current subtitle burned in |
+| ZL + A | Queue next episode — subtitles burned in (encoded stream) |
+| ZL + X | Queue next episode — subtitle burned in (transcoded) |
 | ZL + Y | Download subtitle .ass file for the current episode |
-| ZL + A | Queue next episode download with subtitles burned into encoded stream |
 | ZR + START | Power off the 3DS |
 | ZR + SELECT | Open shutdown sleep timer |
 | L / R | Seek −15 / +30 seconds |
-| D-pad Down | Watch mode (hide controls) |
 | D-pad Up | Exit watch mode |
+| D-pad Down | Watch mode (hide controls) |
+| START | Stop and exit |
 
-A brief toast notification ("DL: E04 - Episode Title") appears when a download is queued.
+A brief toast ("DL: E04 - Episode Title") appears when a download is queued.
 
-### Now Playing — Video (offline / from Downloads)
+### Now Playing — Video (offline)
 
 | Button | Action |
 |--------|--------|
 | A | Pause / Resume |
-| B | Back to browse (keeps playing) |
-| START | Stop playback and exit |
-| X | Queue download of next undownloaded episode (requires internet) |
+| B | Back to browse (playback continues) |
+| X | Queue next undownloaded episode *(requires internet)* |
 | ZR + START | Power off the 3DS |
 | ZR + SELECT | Open shutdown sleep timer |
 | L / R | Seek −15 / +30 seconds |
-| D-pad Down | Watch mode |
 | D-pad Up | Exit watch mode |
+| D-pad Down | Watch mode |
+| START | Stop and exit |
 
-Subtitles are burned in at download time; Y is not available for offline files.
+Subtitles are burned in at download time; Y (subtitle cycle) is not available for offline files.
 
 ### Manga Reader — Normal mode
 
@@ -141,25 +148,26 @@ The top screen shows the page; the bottom screen shows page info and controls.
 
 | Button | Action |
 |--------|--------|
-| L / R or D-pad Left/Right | Previous / next page |
+| B | Back to browse |
+| L / R | Previous / next page |
+| D-pad Left / Right | Previous / next page |
 | D-pad Up / Down | Zoom in / out |
 | Circle pad | Pan (horizontal and vertical) |
 | SELECT | Toggle rotation (portrait ↔ landscape) |
 | START | Enter split-screen mode |
-| B | Back to browse |
 
 ### Manga Reader — Split-screen mode
 
-The page spans both screens (top screen = upper half, bottom screen = lower half).
+The page spans both screens (top = upper half, bottom = lower half).
 
 | Button | Action |
 |--------|--------|
-| L / R or D-pad Left/Right | Previous / next page |
+| B / START | Return to normal mode |
+| L / R | Previous / next page |
+| D-pad Left / Right | Previous / next page |
 | D-pad Up / Down | Zoom in / out |
-| Circle pad Up/Down | Scroll the page vertically |
-| Circle pad Left/Right | Pan horizontally |
-| START | Return to normal mode |
-| B | Return to normal mode |
+| Circle pad Up / Down | Scroll the page vertically |
+| Circle pad Left / Right | Pan horizontally |
 
 When entering split mode the zoom is automatically set to fit the full page height across both screens (480px combined).
 
@@ -169,27 +177,25 @@ Access from **Settings → Manage Downloads**.
 
 | Button | Action |
 |--------|--------|
-| D-pad Up/Down (hold) | Move cursor / continuous scroll |
-| D-pad Left/Right (hold) | Scroll long filename sideways |
-| Circle pad Up/Down | Navigate download queue (top screen) |
 | A | Open selected file (CBZ → reader, video/audio → player) |
-| X | Delete selected file / Remove from queue / Cancel active download |
-| Y | Go to Now Playing |
 | B | Back to settings |
+| X | Delete file / remove from queue / cancel active download |
+| Y | Go to Now Playing |
+| D-pad Up / Down | Move cursor (hold to scroll) |
+| D-pad Left / Right | Scroll long filename sideways (hold) |
+| Circle pad Up / Down | Navigate the download queue on the top screen |
 
-Files are grouped by type (video, books, audio) then by series, season, and episode number. Each file type is color-coded: video = blue, audio = purple, CBZ = red.
-
-The top screen shows the active download with a progress bar, file size, download speed, and estimated time remaining. The queue below it lists upcoming items numbered from 1.
+Files are grouped by type then by series, season, and episode. Color-coded: video = blue, audio = purple, CBZ = red. The top screen shows the active download with speed, size, and ETA; the queue is listed below it numbered from 1.
 
 ### Settings
 
 | Button | Action |
 |--------|--------|
-| D-pad Up/Down | Move cursor |
-| D-pad Left/Right or L/R | Cycle values (bitrate, theme) |
 | A | Toggle / activate option |
-| Y | Go to Now Playing (if something is playing) |
 | B | Save and return to libraries |
+| Y | Go to Now Playing *(if something is playing)* |
+| L / R or D-pad Left / Right | Cycle values (bitrate, theme) |
+| D-pad Up / Down | Move cursor |
 
 ---
 
