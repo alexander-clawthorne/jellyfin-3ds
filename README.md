@@ -52,9 +52,6 @@ Controls change based on the current screen. **START exits the app from every sc
 | Button | Action |
 |--------|--------|
 | ZR + START | Instantly power off the 3DS |
-| ZR + SELECT | Open shutdown sleep timer popup |
-
-The sleep timer popup lets you set hours, minutes, and seconds (default 00:05:00). Use D-pad Left/Right to move between fields, D-pad Up/Down to change the value, A to start the countdown, and B to cancel. While active, the remaining time is shown in the bottom-right corner of the bottom screen.
 
 ### Login
 
@@ -99,6 +96,8 @@ Items that have already been downloaded show a **[D]** badge.
 | L / R | Seek −30 / +30 seconds |
 | D-pad Down | Watch mode (hide bottom screen) |
 | D-pad Up | Exit watch mode |
+
+The sleep timer popup lets you set hours, minutes, and seconds (default 00:05:00). D-pad Left/Right moves between fields, D-pad Up/Down changes the value, A starts the countdown, B cancels. Once active, the remaining time is shown in the bottom-right corner and the console powers off automatically when it reaches zero — even if you leave Now Playing.
 
 ### Now Playing — Video (online)
 
