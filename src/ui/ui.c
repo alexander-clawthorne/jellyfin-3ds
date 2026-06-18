@@ -2229,16 +2229,16 @@ void ui_render_browse(const ui_state_t *state)
         bool paginating = (state->items.total_count > JFIN_MAX_ITEMS);
         if (paginating && sel_dl)
             draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
-                      "A:Sel  X:DL  L/R:Pg  B:Back");
+                      "A:Sel  X:DL  L/R:Pg  B:Back  ZR:Off");
         else if (paginating)
             draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
-                      "A:Sel  B:Back  L/R:Pg  SEL:Search");
+                      "A:Sel  B:Back  L/R:Pg  SEL:Search  ZR:Off");
         else if (sel_dl)
             draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
-                      "A:Play  X:DL  ZL+X:DL+Sub  ZL+Y:Sub  ZL+A:DL+Enc  B:Back");
+                      "A:Play  X:DL  ZL+X:+Sub  ZL+Y:Sub  ZL+A:Enc  B:Bk  ZR:Off");
         else
             draw_text(10, 220, 0.4f, rgba(COLOR_TEXT_SECONDARY),
-                      "A:Select  B:Back  SEL:Search");
+                      "A:Select  B:Back  SEL:Search  ZR:Off");
     }
 }
 
@@ -2438,10 +2438,12 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     if (state->np_toast_timer > 0)
         draw_text(10, 163, 0.42f, rgba(COLOR_ACCENT), state->np_toast);
 
-    /* Controls hint — two lines for video to fit all bindings */
+    /* Controls hint — two lines for video, three for video download row */
     if (!is_video) {
         draw_text(10, 180, 0.4f, rgba(COLOR_TEXT_PRIMARY),
                   "A:Pause B:Back STR:Stop ZL/ZR:Skip Y:Shuf SEL:Rep");
+        draw_text(10, 193, 0.4f, rgba(COLOR_TEXT_SECONDARY),
+                  "ZR+START: Power off");
     } else {
         const char *line1 = state->now_playing_offline
             ? "A:Pause B:Back STR:Stop L/R:Seek Y:sub"
@@ -2449,6 +2451,8 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
         draw_text(10, 177, 0.4f, rgba(COLOR_TEXT_PRIMARY), line1);
         draw_text(10, 191, 0.4f, rgba(COLOR_TEXT_PRIMARY),
                   "X:DLnxt  ZL+X:DL+sub  ZL+Y:DLsub  ZL+A:DL+enc");
+        draw_text(10, 205, 0.4f, rgba(COLOR_TEXT_SECONDARY),
+                  "ZR+START: Power off");
     }
 }
 
