@@ -1139,11 +1139,15 @@ static void draw_subtitles_top(void)
         int nlines = 1;
         for (const char *q = s->text; *q; q++) if (*q == '\n') nlines++;
 
+        int row = (s->alignment - 1) / 3;
         float ax = (s->screen_x >= 0.0f) ? s->screen_x : 200.0f;
-        float ay = (s->screen_y >= 0.0f) ? s->screen_y : 226.0f;
+        float ay;
+        if (s->screen_y >= 0.0f) ay = s->screen_y;
+        else if (row == 2)        ay = 8.0f;
+        else if (row == 1)        ay = 120.0f;
+        else                      ay = 226.0f;
 
         float block_h = nlines * SUB_LINE_H;
-        int row = (s->alignment - 1) / 3;
         float line_y;
         if (row == 0)      line_y = ay - block_h;
         else if (row == 1) line_y = ay - block_h / 2.0f;
@@ -1312,7 +1316,7 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     snprintf(buf_str, sizeof(buf_str), "Buffer: %d%%", buf_pct);
     draw_text(115, 100, 0.4f, rgba(COLOR_TEXT_SECONDARY), buf_str);
 
-    /* Diagnostics for video playback */
+    /* Diagnostics and subtitle status for video playback */
     if (is_video) {
         char diag[80];
         snprintf(diag, sizeof(diag), "%sDec: %.0f fps  Disp: %.0f fps  %dx%d",
@@ -1320,11 +1324,34 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
                  vstatus.decode_fps, vstatus.display_fps,
                  vstatus.video_width, vstatus.video_height);
         draw_text(30, 125, 0.38f, rgba(COLOR_TEXT_SECONDARY), diag);
+
+        char sub_str[48];
+        if (state->subtitle_stream_index >= 0) {
+            const char *label = state->subtitle_lang_pref[0] ? state->subtitle_lang_pref : "on";
+            for (int i = 0; i < state->subtitle_list.count; i++) {
+                if (state->subtitle_list.subs[i].index == state->subtitle_stream_index) {
+                    label = state->subtitle_list.subs[i].language[0] ?
+                            state->subtitle_list.subs[i].language :
+                            state->subtitle_list.subs[i].title;
+                    break;
+                }
+            }
+            snprintf(sub_str, sizeof(sub_str), "Subs: %s", label);
+        } else {
+            snprintf(sub_str, sizeof(sub_str), "Subs: off");
+        }
+        u32 sub_color = (state->subtitle_stream_index >= 0) ?
+                        rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_SECONDARY);
+        draw_text(30, 145, 0.4f, sub_color, sub_str);
     }
 
     /* Controls hint */
-    draw_text(20, 180, 0.45f, rgba(COLOR_TEXT_PRIMARY),
-              "A:Pause X:Stop B:Back L/R:Seek");
+    if (is_video)
+        draw_text(20, 180, 0.45f, rgba(COLOR_TEXT_PRIMARY),
+                  "A:Pause X:Stop B:Back L/R:Seek Y:Subs");
+    else
+        draw_text(20, 180, 0.45f, rgba(COLOR_TEXT_PRIMARY),
+                  "A:Pause X:Stop B:Back L/R:Seek");
 }
 
 void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)

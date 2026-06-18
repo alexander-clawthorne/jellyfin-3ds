@@ -619,12 +619,29 @@ static void decode_thread_func(void *arg)
     AVPacket *pkt = av_packet_alloc();
     if (!pkt) return;
 
+    bool first_video_pkt = true;
+    bool got_video = false;
+    int  audio_skipped = 0;
     while (!s_vp.stop_requested) {
         bool is_video = false;
         int ret = demux_read_packet(&s_vp.demux, pkt, &is_video);
         if (ret < 0) break; /* EOF or error */
 
         if (is_video) {
+            if (first_video_pkt) {
+                first_video_pkt = false;
+                /* Jellyfin sends audio-only pre-roll before the first video IDR
+                 * while the server-side filter chain initialises. Subtract the
+                 * first video PTS from seek_offset so position_ticks doesn't
+                 * double-count the seek, keeping subtitle timestamps in sync. */
+                if (audio_skipped > 0 && pkt->pts != AV_NOPTS_VALUE) {
+                    AVFormatContext *_fmt = (AVFormatContext *)s_vp.demux.fmt_ctx;
+                    AVRational _tb = _fmt->streams[s_vp.demux.video_stream_idx]->time_base;
+                    double first_video_pts = pkt->pts * (double)_tb.num / (double)_tb.den;
+                    s_vp.seek_offset_ticks -= (int64_t)(first_video_pts * 10000000.0);
+                }
+            }
+            got_video = true;
             bool got_frame = mvd_decode_packet(&s_vp.mvd, pkt->data, pkt->size);
 
             /* Compute video PTS in seconds */
@@ -651,7 +668,11 @@ static void decode_thread_func(void *arg)
                 }
             }
         } else {
-            decode_audio_packet(pkt);
+            if (got_video) {
+                decode_audio_packet(pkt);
+            } else {
+                audio_skipped++;
+            }
         }
 
         av_packet_unref(pkt);
