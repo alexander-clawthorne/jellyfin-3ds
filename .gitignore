@@ -19,3 +19,6 @@ lib/ffmpeg/*.a
 lib/ffmpeg/include/
 *.bnr
 *.cia
+test-files/
+debug*.log
+*.dmp
