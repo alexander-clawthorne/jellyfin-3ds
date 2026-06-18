@@ -133,6 +133,14 @@ int main(int argc, char *argv[])
         touchPosition touch;
         hidTouchRead(&touch);
 
+        /* ZR+START: shut down the 3DS from any view */
+        if ((kheld & KEY_ZR) && (kdown & KEY_START)) {
+            ptmSysmInit();
+            PTMSYSM_ShutdownAsync(0);
+            ptmSysmExit();
+            break;
+        }
+
         /* Exit on START — only from menu views; player/reader handle START themselves */
         if (kdown & KEY_START &&
             s_ui.current_view != VIEW_NOW_PLAYING &&
