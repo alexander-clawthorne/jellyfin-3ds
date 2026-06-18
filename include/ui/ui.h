@@ -137,6 +137,15 @@ typedef struct {
     bool                 downloads_queue_focus;  /* true = navigating queue on top screen */
     int                  downloads_queue_index;  /* selected queue item */
     int                  downloads_name_offset;  /* char offset for scrolling long names */
+
+    /* Shutdown timer */
+    bool    shutdown_popup_open;
+    int     shutdown_popup_sel;      /* 0=hours, 1=mins, 2=secs */
+    int     shutdown_popup_h;
+    int     shutdown_popup_m;
+    int     shutdown_popup_s;
+    bool    shutdown_timer_active;
+    u64     shutdown_timer_deadline; /* osGetTime() ms value when to fire */
 } ui_state_t;
 
 /* ── Lifecycle ───────────────────────────────────────────────────── */

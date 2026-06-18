@@ -1116,6 +1116,37 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
                 break;
             }
 
+            /* Shutdown timer popup — consumes all input while open */
+            if (state->shutdown_popup_open) {
+                if (kdown & KEY_DLEFT)
+                    state->shutdown_popup_sel = (state->shutdown_popup_sel + 2) % 3;
+                if (kdown & KEY_DRIGHT)
+                    state->shutdown_popup_sel = (state->shutdown_popup_sel + 1) % 3;
+                if (kdown & KEY_DUP) {
+                    if      (state->shutdown_popup_sel == 0) state->shutdown_popup_h = (state->shutdown_popup_h +  1) % 24;
+                    else if (state->shutdown_popup_sel == 1) state->shutdown_popup_m = (state->shutdown_popup_m +  1) % 60;
+                    else                                     state->shutdown_popup_s = (state->shutdown_popup_s +  1) % 60;
+                }
+                if (kdown & KEY_DDOWN) {
+                    if      (state->shutdown_popup_sel == 0) state->shutdown_popup_h = (state->shutdown_popup_h + 23) % 24;
+                    else if (state->shutdown_popup_sel == 1) state->shutdown_popup_m = (state->shutdown_popup_m + 59) % 60;
+                    else                                     state->shutdown_popup_s = (state->shutdown_popup_s + 59) % 60;
+                }
+                if (kdown & KEY_A) {
+                    u64 total_ms = ((u64)state->shutdown_popup_h * 3600 +
+                                    (u64)state->shutdown_popup_m *   60 +
+                                    (u64)state->shutdown_popup_s) * 1000;
+                    if (total_ms > 0) {
+                        state->shutdown_timer_deadline = osGetTime() + total_ms;
+                        state->shutdown_timer_active   = true;
+                    }
+                    state->shutdown_popup_open = false;
+                }
+                if (kdown & KEY_B)
+                    state->shutdown_popup_open = false;
+                break;
+            }
+
             /* Watch mode: D-pad down hides controls, only up exits */
             if (state->bottom_hidden) {
                 if (kdown & KEY_DUP)
@@ -1267,6 +1298,12 @@ void ui_update(ui_state_t *state, const jfin_session_t *session,
             /* Y (audio): toggle shuffle */
             if ((kdown & KEY_Y) && !vid_active)
                 state->shuffle_mode = !state->shuffle_mode;
+            /* ZL+SELECT: open shutdown timer popup */
+            if ((kdown & KEY_SELECT) && (kheld & KEY_ZL)) {
+                state->shutdown_popup_open = true;
+                state->shutdown_popup_sel  = 1;
+                break;
+            }
             /* SELECT: repeat mode 0→1→2 (audio only) */
             if ((kdown & KEY_SELECT) && !vid_active)
                 state->repeat_mode = (state->repeat_mode + 1) % 3;
@@ -2443,7 +2480,7 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
         draw_text(10, 180, 0.4f, rgba(COLOR_TEXT_PRIMARY),
                   "A:Pause B:Back STR:Stop ZL/ZR:Skip Y:Shuf SEL:Rep");
         draw_text(10, 193, 0.4f, rgba(COLOR_TEXT_SECONDARY),
-                  "ZR+START: Power off");
+                  "ZR+START:Off  ZL+SEL:Timer");
     } else {
         const char *line1 = state->now_playing_offline
             ? "A:Pause B:Back STR:Stop L/R:Seek Y:sub"
@@ -2452,7 +2489,44 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
         draw_text(10, 191, 0.4f, rgba(COLOR_TEXT_PRIMARY),
                   "X:DLnxt  ZL+X:DL+sub  ZL+Y:DLsub  ZL+A:DL+enc");
         draw_text(10, 205, 0.4f, rgba(COLOR_TEXT_SECONDARY),
-                  "ZR+START: Power off");
+                  "ZR+START:Off  ZL+SEL:Timer");
+    }
+
+    /* Shutdown timer countdown (bottom-right) */
+    if (state->shutdown_timer_active) {
+        u64 now = osGetTime();
+        u64 rem = (state->shutdown_timer_deadline > now)
+                  ? state->shutdown_timer_deadline - now : 0;
+        int th = (int)(rem / 3600000);
+        int tm = (int)((rem % 3600000) / 60000);
+        int ts = (int)((rem % 60000)   / 1000);
+        char tbuf[16];
+        snprintf(tbuf, sizeof(tbuf), "%02d:%02d:%02d", th, tm, ts);
+        draw_text(218, 220, 0.45f, rgba(COLOR_ACCENT), tbuf);
+    }
+
+    /* Shutdown timer popup overlay */
+    if (state->shutdown_popup_open) {
+        C2D_DrawRectSolid(55, 72, 0.9f, 210, 96, rgba(0x1A1A2EF0));
+        draw_text(98, 80, 0.5f, rgba(COLOR_PRIMARY), "Shutdown Timer");
+
+        char hbuf[4], mbuf[4], sbuf[4];
+        snprintf(hbuf, sizeof(hbuf), "%02d", state->shutdown_popup_h);
+        snprintf(mbuf, sizeof(mbuf), "%02d", state->shutdown_popup_m);
+        snprintf(sbuf, sizeof(sbuf), "%02d", state->shutdown_popup_s);
+
+        u32 ch = state->shutdown_popup_sel == 0 ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_PRIMARY);
+        u32 cm = state->shutdown_popup_sel == 1 ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_PRIMARY);
+        u32 cs = state->shutdown_popup_sel == 2 ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_PRIMARY);
+
+        draw_text( 80, 108, 0.7f, ch, hbuf);
+        draw_text(108, 108, 0.7f, rgba(COLOR_TEXT_SECONDARY), ":");
+        draw_text(118, 108, 0.7f, cm, mbuf);
+        draw_text(146, 108, 0.7f, rgba(COLOR_TEXT_SECONDARY), ":");
+        draw_text(156, 108, 0.7f, cs, sbuf);
+
+        draw_text(62, 148, 0.38f, rgba(COLOR_TEXT_SECONDARY),
+                  "U/D:value  L/R:field  A:Start  B:Cancel");
     }
 }
 
