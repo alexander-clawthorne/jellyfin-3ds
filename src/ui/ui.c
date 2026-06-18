@@ -2507,7 +2507,7 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
 
     /* Shutdown timer popup overlay */
     if (state->shutdown_popup_open) {
-        C2D_DrawRectSolid(55, 72, 0.9f, 210, 96, rgba(0x1A1A2EF0));
+        C2D_DrawRectSolid(55, 72, 0.9f, 210, 96, rgba(0x1A1A2EFF));
         draw_text(98, 80, 0.5f, rgba(COLOR_PRIMARY), "Shutdown Timer");
 
         char hbuf[4], mbuf[4], sbuf[4];
