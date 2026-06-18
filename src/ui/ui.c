@@ -2368,6 +2368,31 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
     if (state->bottom_hidden)
         return; /* black bottom screen — just the clear above */
 
+    /* Shutdown timer popup — render standalone so no status text bleeds through */
+    if (state->shutdown_popup_open) {
+        C2D_DrawRectSolid(55, 72, 0.0f, 210, 96, rgba(0x1A1A2EFF));
+        draw_text(98, 80, 0.5f, rgba(COLOR_PRIMARY), "Shutdown Timer");
+
+        char hbuf[4], mbuf[4], sbuf[4];
+        snprintf(hbuf, sizeof(hbuf), "%02d", state->shutdown_popup_h);
+        snprintf(mbuf, sizeof(mbuf), "%02d", state->shutdown_popup_m);
+        snprintf(sbuf, sizeof(sbuf), "%02d", state->shutdown_popup_s);
+
+        u32 ch = state->shutdown_popup_sel == 0 ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_PRIMARY);
+        u32 cm = state->shutdown_popup_sel == 1 ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_PRIMARY);
+        u32 cs = state->shutdown_popup_sel == 2 ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_PRIMARY);
+
+        draw_text( 80, 108, 0.7f, ch, hbuf);
+        draw_text(108, 108, 0.7f, rgba(COLOR_TEXT_SECONDARY), ":");
+        draw_text(118, 108, 0.7f, cm, mbuf);
+        draw_text(146, 108, 0.7f, rgba(COLOR_TEXT_SECONDARY), ":");
+        draw_text(156, 108, 0.7f, cs, sbuf);
+
+        draw_text(62, 148, 0.38f, rgba(COLOR_TEXT_SECONDARY),
+                  "U/D:value  L/R:field  A:Start  B:Cancel");
+        return;
+    }
+
     /* Use video position/state if video is playing, otherwise audio */
     int64_t pos_ticks, dur_ticks;
     int buf_pct;
@@ -2505,29 +2530,6 @@ void ui_render_now_playing(const ui_state_t *state, const player_status_t *playe
         draw_text(218, 220, 0.45f, rgba(COLOR_ACCENT), tbuf);
     }
 
-    /* Shutdown timer popup overlay */
-    if (state->shutdown_popup_open) {
-        C2D_DrawRectSolid(55, 72, 0.0f, 210, 96, rgba(0x1A1A2EFF));
-        draw_text(98, 80, 0.5f, rgba(COLOR_PRIMARY), "Shutdown Timer");
-
-        char hbuf[4], mbuf[4], sbuf[4];
-        snprintf(hbuf, sizeof(hbuf), "%02d", state->shutdown_popup_h);
-        snprintf(mbuf, sizeof(mbuf), "%02d", state->shutdown_popup_m);
-        snprintf(sbuf, sizeof(sbuf), "%02d", state->shutdown_popup_s);
-
-        u32 ch = state->shutdown_popup_sel == 0 ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_PRIMARY);
-        u32 cm = state->shutdown_popup_sel == 1 ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_PRIMARY);
-        u32 cs = state->shutdown_popup_sel == 2 ? rgba(COLOR_ACCENT) : rgba(COLOR_TEXT_PRIMARY);
-
-        draw_text( 80, 108, 0.7f, ch, hbuf);
-        draw_text(108, 108, 0.7f, rgba(COLOR_TEXT_SECONDARY), ":");
-        draw_text(118, 108, 0.7f, cm, mbuf);
-        draw_text(146, 108, 0.7f, rgba(COLOR_TEXT_SECONDARY), ":");
-        draw_text(156, 108, 0.7f, cs, sbuf);
-
-        draw_text(62, 148, 0.38f, rgba(COLOR_TEXT_SECONDARY),
-                  "U/D:value  L/R:field  A:Start  B:Cancel");
-    }
 }
 
 void ui_render_settings(const ui_state_t *state, const jfin_session_t *session)
